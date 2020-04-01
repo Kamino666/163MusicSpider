@@ -1,5 +1,5 @@
 """
-根据专辑 ID 获取到所有的音乐 ID
+根据榜单 ID 获取到所有的音乐 ID
 """
 import datetime
 import json

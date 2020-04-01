@@ -41,11 +41,14 @@ class Comment(object):
         if (check):
             print("url:", url, "has request. pass")
             return
+
+        # 首次请求保存redis以及热评(hot)和顶评(top)
+        # 请求
         r = requests.get(url, headers=self.headers, params=params)
         # 结果解析
         commentsJson = json.loads(r.text)
         # 保存redis去重缓存
-        if (commentsJson['code'] == 200):
+        if commentsJson['code'] == 200:
             redis_util.saveUrl(redis_util.commentPrefix, str(music_id))
         else:
             print(url, " request error :", commentsJson)
@@ -53,12 +56,35 @@ class Comment(object):
         # 热评
         for item in commentsJson['hotComments']:
             self.dbsave(item, music_id)
-
-        # 普通评论
-        for item in commentsJson['comments']:
+        # 顶评
+        for item in commentsJson['topComments']:
             self.dbsave(item, music_id)
-        # 请求完成后睡一秒 防作弊
-        time.sleep(1)
+        # 评论数
+        total = commentsJson['total']
+
+        def saveCommentSmallBatch(limit,offset):
+            # 请求
+            r_sb = requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset})
+            # 结果解析
+            commentsJson_sb = json.loads(r_sb.text)
+            # 普通评论
+            for item in commentsJson_sb['comments']:
+                self.dbsave(item, music_id)
+            # 请求完成后睡一秒 防作弊
+            time.sleep(1)
+        # 根据获取到的评论数分批访问
+        full = 0  # 访问100个的次数
+        leftover = 0  # 最后一次访问的评论数
+        if total < 100:
+            leftover = total
+        elif total >= 1000:
+            full = 10
+        else:
+            full = total // 100
+            leftover = total % 100
+        for i in range(full):
+            saveCommentSmallBatch(100,i*100)
+        saveCommentSmallBatch(leftover,full*100)
 
     # 保存数据库
     def dbsave(self, item, music_id):
@@ -89,7 +115,7 @@ def saveCommentBatch(index):
     my_comment = Comment()
     offset = 1000 * index
     musics = sql.get_music_page(offset, 1000)
-    print("index:", index, "offset:", offset, "artists :", len(musics), "start :", musics[0]['music_id'])
+    print("index:", index, "offset:", offset, "musics :", len(musics), "start :", musics[0]['music_id'])
     for item in musics:
         try:
             my_comment.saveComment(item['music_id'])
@@ -120,5 +146,5 @@ def commentSpider():
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-# if __name__ == '__main__':
-#     commentSpider()
+if __name__ == '__main__':
+    commentSpider()
