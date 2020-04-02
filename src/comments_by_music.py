@@ -62,7 +62,7 @@ class Comment(object):
         # 评论数
         total = commentsJson['total']
 
-        def saveCommentSmallBatch(limit,offset):
+        def saveCommentSmallBatch(limit, offset):
             # 请求
             r_sb = requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset})
             # 结果解析
@@ -72,6 +72,7 @@ class Comment(object):
                 self.dbsave(item, music_id)
             # 请求完成后睡一秒 防作弊
             time.sleep(1)
+
         # 根据获取到的评论数分批访问
         full = 0  # 访问100个的次数
         leftover = 0  # 最后一次访问的评论数
@@ -83,8 +84,8 @@ class Comment(object):
             full = total // 100
             leftover = total % 100
         for i in range(full):
-            saveCommentSmallBatch(100,i*100)
-        saveCommentSmallBatch(leftover,full*100)
+            saveCommentSmallBatch(100, i * 100)
+        saveCommentSmallBatch(leftover, full * 100)
 
     # 保存数据库
     def dbsave(self, item, music_id):
@@ -145,6 +146,7 @@ def commentSpider():
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
+
 
 if __name__ == '__main__':
     commentSpider()

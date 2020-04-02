@@ -22,6 +22,14 @@ http://music.163.com/api/event/get/373540275
 http://music.163.com/api/dj/program/373540275
 373540275为电台主播id
 
+榜单获取
+http://music.163.com/api/toplist/
+网易云的所有榜单的信息
+
+榜单内容
+http://music.163.com/api/playlist/detail?id=19723756
+19723756为榜单id 同歌单接口
+
 歌单详情
 http://music.163.com/api/playlist/detail?id=2765813847
 2765813847为歌单id

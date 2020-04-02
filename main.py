@@ -9,6 +9,7 @@ from src.comments_by_music import commentSpider
 from src.lyric_by_music import lyricSpider
 from src.music_by_album import musicSpider
 
+# TODO（Kamino）： 改用Logging类处理日志
 # 保存日志
 class Logger(object):
     def __init__(self, filename="Default.log"):
@@ -23,6 +24,9 @@ class Logger(object):
         pass
 
 
+# TODO（Kamino）：处理所有的数据库插入失败bug
+# TODO（Kamino）：调节Batch的数值
+# TODO（Kamino）：增加Proxy功能
 if __name__ == '__main__':
     path = os.path.abspath(os.path.dirname(__file__))
     type = sys.getfilesystemencoding()

@@ -40,19 +40,20 @@ class Music(object):
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
         url = 'https://music.163.com/album?id=' + str(album_id)
-        # 去redis验证是否爬取过
-        check = redis_util.checkIfRequest(redis_util.musicPrefix, url)
-        if (check):
+        # 去redis验证是否爬取过这个专辑
+        check = redis_util.checkIfRequest(redis_util.albumPrefix, url)
+        if check:
             print("url:", url, "has request. pass")
             time.sleep(1)
             return
-        r = requests.get('https://music.163.com/album', headers=self.headers, params=params)
 
+        # 访问
+        r = requests.get('https://music.163.com/album', headers=self.headers, params=params)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
         body = soup.body
         # 保存redis去重缓存
-        redis_util.saveUrl(redis_util.musicPrefix, url)
+        redis_util.saveUrl(redis_util.albumPrefix, url)
         musics = body.find('ul', attrs={'class': 'f-hide'}).find_all('li')  # 获取专辑的所有音乐
         if len(musics) == 0:
             return
@@ -71,31 +72,33 @@ class Music(object):
     # 调用网易云api爬取
     def save_music_by_api(self, album_id):
         url = "http://music.163.com/api/album/" + str(album_id)
-        # 去redis验证是否爬取过
-        check = redis_util.checkIfRequest(redis_util.musicPrefix, str(album_id))
-        if (check):
+        # 去redis验证是否爬取过这个专辑
+        check = redis_util.checkIfRequest(redis_util.albumPrefix, str(album_id))
+        if check:
             print("url:", url, "has request. pass")
             time.sleep(1)
             return
+
+        # 访问
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
         r = requests.get(url, headers=self.headers)
         # 解析
-        ablum_json = json.loads(r.text)
+        album_json = json.loads(r.text)
         # 保存redis去重缓存
-        if ablum_json['code'] == 200:
-            redis_util.saveUrl(redis_util.musicPrefix, str(album_id))
+        if album_json['code'] == 200:
+            redis_util.saveUrl(redis_util.albumPrefix, str(album_id))
         else:
-            print(url, " request error :", ablum_json)
+            print(url, " request error :", album_json)
             return
-        for item in ablum_json.get('album').get('songs'):
+        for item in album_json.get('album').get('songs'):
             music_id = item['id']
             music_name = item['name']
             try:
                 sql.insert_music(music_id, music_name, album_id)
             except Exception as e:
                 # 打印错误日志
-                print(music_id, music_name, album_id, ' inset db error: ', str(e))
+                print(music_id, music_name, album_id, ' insert db error: ', str(e))
                 # traceback.print_exc()
                 time.sleep(1)
 

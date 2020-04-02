@@ -82,6 +82,14 @@ def insert_artist(artist_id, artist_name):
     connection.commit()
 
 
+# 保存榜单
+def insert_toplist(toplist_id, name, subscribedCount):
+    with connection.cursor() as cursor:
+        sql = "INSERT INTO `toplists` (toplist_id, name, subscribedCount) VALUES (%s, %s,%s)"
+        cursor.execute(sql, (toplist_id, name, subscribedCount))
+    connection.commit()
+
+
 # 获取所有歌手的 数量
 def get_all_artist_num():
     with connection.cursor() as cursor:
@@ -104,6 +112,22 @@ def get_all_album_num():
         sql = "SELECT count(1) as num FROM `albums` where album_id > 36503960 "
         cursor.execute(sql, ())
         return cursor.fetchone()
+
+
+# 获取所有榜单的 数量
+def get_toplists_num():
+    with connection.cursor() as cursor:
+        sql = "SELECT count(1) as num FROM `toplists` "
+        cursor.execute(sql, ())
+        return cursor.fetchone()
+
+
+# 获取所有榜单
+def get_toplists():
+    with connection.cursor() as cursor:
+        sql = "SELECT `toplist_id` FROM `toplists` "
+        cursor.execute(sql, ())
+        return cursor.fetchall()
 
 
 # 分页获取专辑的 ID

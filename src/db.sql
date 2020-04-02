@@ -44,3 +44,18 @@ CREATE TABLE `lyrics` (
   PRIMARY KEY (`music_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 榜单表
+CREATE TABLE `toplists` (
+  `toplist_id` bigint(20) NOT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `subscribedCount` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`toplist_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 歌单表
+CREATE TABLE `playlists` (
+  `playlists_id` bigint(20) NOT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `subscribedCount` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`playlists_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

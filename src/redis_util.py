@@ -13,6 +13,8 @@ commentPrefix = projectPrefix + 'comment:'
 musicPrefix = projectPrefix + 'music:'
 # 专辑前缀
 albumPrefix = projectPrefix + 'album:'
+# 歌手前缀
+artistPrefix = projectPrefix + 'artist:'
 
 
 # 查看key是否存在

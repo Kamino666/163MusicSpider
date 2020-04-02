@@ -38,17 +38,18 @@ class Album(object):
         self.headers["User-Agent"] = agent
         # 去redis验证是否爬取过
         url = 'http://music.163.com/artist/album?id=' + str(artist_id)
-        check = redis_util.checkIfRequest(redis_util.albumPrefix, url)
-        if (check):
+        check = redis_util.checkIfRequest(redis_util.artistPrefix, url)
+        if check:
             print("url:", url, "has request. pass")
             time.sleep(2)
             return
-        r = requests.get('http://music.163.com/artist/album', headers=self.headers, params=params)
 
+        # 访问
+        r = requests.get('http://music.163.com/artist/album', headers=self.headers, params=params)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
         # 保存redis去重缓存
-        redis_util.saveUrl(redis_util.albumPrefix, url)
+        redis_util.saveUrl(redis_util.artistPrefix, url)
         # 所有图片
         imgs = soup.find_all('div', attrs={'class': 'u-cover u-cover-alb3'})
         # 专辑信息
