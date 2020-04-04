@@ -132,7 +132,7 @@ def commentSpider():
     print("======= 开始爬 评论 信息 ===========")
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
-    # 所有歌手数量
+    # 所有歌曲数量
     musics_num = sql.get_all_music_num()
     # 批次
     batch = math.ceil(musics_num.get('num') / 1000.0)

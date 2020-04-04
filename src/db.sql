@@ -20,7 +20,7 @@ CREATE TABLE `albums` (
 CREATE TABLE `musics` (
   `music_id` int(20) NOT NULL,
   `music_name` varchar(255) DEFAULT NULL,
-  `album_id` int(20) NOT NULL,
+  `album_id` int(20) UNSIGNED NOT NULL,
   PRIMARY KEY (`music_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -54,8 +54,9 @@ CREATE TABLE `toplists` (
 
 -- 歌单表
 CREATE TABLE `playlists` (
-  `playlists_id` bigint(20) NOT NULL,
+  `playlist_id` bigint(20) NOT NULL,
   `name` varchar(255) DEFAULT NULL,
   `subscribedCount` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`playlists_id`)
+  `img_url` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`playlist_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

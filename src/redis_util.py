@@ -15,6 +15,8 @@ musicPrefix = projectPrefix + 'music:'
 albumPrefix = projectPrefix + 'album:'
 # 歌手前缀
 artistPrefix = projectPrefix + 'artist:'
+# 歌单前缀
+playlistPrefix = projectPrefix + 'playlist:'
 
 
 # 查看key是否存在

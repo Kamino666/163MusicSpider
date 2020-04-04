@@ -1,8 +1,8 @@
 """
-根据榜单 ID 获取到所有的音乐 ID
+根据歌单 ID 获取到所有的音乐 ID
 """
 import datetime
-import ujson
+import json
 import math
 import random
 import time
@@ -33,67 +33,71 @@ class Music(object):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36'
     }
 
-    # 调用网易云api爬取
-    def save_music_by_api(self, toplist_id):
-        url = "http://music.163.com/api/playlist/detail?id=" + str(toplist_id)
-
+    # TODO(Kamino): 改进歌曲数据库，来源不再只能是专辑
+    # 调用网易云api爬取 歌单所有歌曲
+    def save_music_by_api(self, playlist_id):
+        url = "http://music.163.com/api/playlist/detail?id=" + str(playlist_id)
         # 访问
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
         r = requests.get(url, headers=self.headers)
         # 解析
-        toplist_json = ujson.loads(r.text)
-        # 保存redis去重缓存
-        if toplist_json['code'] == 200:
-            # redis_util.saveUrl(redis_util.musicPrefix, str(toplist_id))
-            pass
-        else:
-            print(url, " request error :", toplist_json)
+        album_json = json.loads(r.text)
+        # 错误处理
+        if album_json['code'] != 200:
+            print(url, " request error :", album_json)
             return
-        for item in toplist_json['result']['tracks']:
+        for item in album_json.get('result').get('tracks'):
             music_id = item['id']
             music_name = item['name']
-            album_id = item['album']['id']
             try:
-                sql.insert_music(music_id, music_name, album_id)
+                sql.insert_music(music_id, music_name, playlist_id)
+                print("sql success a song")
             except Exception as e:
                 # 打印错误日志
-                print(music_id, music_name, toplist_id, ' insert db error: ', str(e))
+                print(music_id, music_name, playlist_id, ' insert db error: ', str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
 
 
-def saveMusicByToplist():
+# 爬取一批歌单 播放量高优先
+def saveMusicBatch(index):
     my_music = Music()
-    toplists = sql.get_toplists()
-    print("total:", len(toplists), "toplists", "start")
-    for i in toplists:
+    offset = 1000 * index
+    playlists = sql.get_playlist_page(offset, 1000)
+    print("index:", index, "offset:", offset, " playlists :", len(playlists), "start")
+    for i in playlists:
         try:
             # 调用网易云api爬取
-            my_music.save_music_by_api(i['toplist_id'])
-            # 采用模仿网易云页面请求的方式爬取
-            # my_music.save_music(i['toplist_id'])
-            time.sleep(2)
+            my_music.save_music_by_api(i['playlist_id'])
+            # 暂停
+            time.sleep(1)
         except Exception as e:
             # 打印错误日志
             print(str(i) + ' interval error: ' + str(e))
             time.sleep(2)
-    print("total:", len(toplists), "toplists", "finished")
+    print("index:", index, "finished")
 
 
 def musicSpider():
-    print("======= 开始爬 音乐 信息 ===========")
+    print("======= 开始爬 歌单音乐 信息 ===========")
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
-    # 所有榜单数量
-    toplists_num = sql.get_toplists_num()
-    print("所有榜单数量：", toplists_num)
-    saveMusicByToplist()
+    # 所有歌单数量
+    playlists_num = sql.get_playlists_num()['num']
+    print("所有歌单数量：", playlists_num)
+    # 批次
+    batch = math.ceil(playlists_num / 1000.0)
+    # 构建线程池
+    # pool = ProcessPoolExecutor(1)
+    for index in range(0, batch):
+        saveMusicBatch(index)
+        # pool.submit(saveMusicBatch, index)
+    # pool.shutdown(wait=True)
     print("======= 结束爬 音乐 信息 ===========")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-
-if __name__ == '__main__':
-    musicSpider()
+# if __name__ == '__main__':
+#     musicSpider()

@@ -30,6 +30,10 @@ http://music.163.com/api/toplist/
 http://music.163.com/api/playlist/detail?id=19723756
 19723756为榜单id 同歌单接口
 
+歌单
+https://music.163.com/#/discover/playlist/?order=hot&cat=%E5%8D%8E%E8%AF%AD&limit=35&offset=0
+cat后是分类 limit最大35
+
 歌单详情
 http://music.163.com/api/playlist/detail?id=2765813847
 2765813847为歌单id

@@ -26,6 +26,7 @@ def get_all_comment_num():
         cursor.execute(sql, ())
         return cursor.fetchone()
 
+
 # 分页获取歌词信息
 def get_comment_page(offset, size):
     with connection.cursor() as cursor:
@@ -90,6 +91,14 @@ def insert_toplist(toplist_id, name, subscribedCount):
     connection.commit()
 
 
+# 保存榜单
+def insert_playlist(playlist_id, name, playCount, img_url):
+    with connection.cursor() as cursor:
+        sql = "INSERT INTO `playlists` (playlist_id, name, playCount, img_url) VALUES (%s, %s,%s,%s)"
+        cursor.execute(sql, (playlist_id, name, playCount, img_url))
+    connection.commit()
+
+
 # 获取所有歌手的 数量
 def get_all_artist_num():
     with connection.cursor() as cursor:
@@ -122,6 +131,14 @@ def get_toplists_num():
         return cursor.fetchone()
 
 
+# 获取所有歌单的 数量
+def get_playlists_num():
+    with connection.cursor() as cursor:
+        sql = "SELECT count(1) as num FROM `playlists` "
+        cursor.execute(sql, ())
+        return cursor.fetchone()
+
+
 # 获取所有榜单
 def get_toplists():
     with connection.cursor() as cursor:
@@ -133,7 +150,15 @@ def get_toplists():
 # 分页获取专辑的 ID
 def get_album_page(offset, size):
     with connection.cursor() as cursor:
-        sql = "SELECT `album_id` FROM `albums` where album_id > 36503960 limit %s ,%s"
+        sql = "SELECT `album_id` FROM `albums` limit %s ,%s"
+        cursor.execute(sql, (offset, size))
+        return cursor.fetchall()
+
+
+# 分页获取歌单的 ID 播放量高优先
+def get_playlist_page(offset, size):
+    with connection.cursor() as cursor:
+        sql = "SELECT `playlist_id` FROM `playlists` order by playCount DESC limit %s,%s "
         cursor.execute(sql, (offset, size))
         return cursor.fetchall()
 
