@@ -29,18 +29,21 @@ class Comment(object):
         'Upgrade-Insecure-Requests': '1',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36'
     }
+    commentsCount = 0
 
+    # 保存一首歌的评论，返回获取到的数量
     def saveComment(self, music_id):
-        params = {'limit': 1000, 'offset': 0}
+        self.commentsCount = 0  # 归零
+        params = {'limit': 100, 'offset': 0}
         # 获取歌手个人主页
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
         url = 'http://music.163.com/api/v1/resource/comments/R_SO_4_' + str(music_id)
         # 去redis验证是否爬取过
         check = redis_util.checkIfRequest(redis_util.commentPrefix, str(music_id))
-        if (check):
+        if check:
             print("url:", url, "has request. pass")
-            return
+            return 0
 
         # 首次请求保存redis以及热评(hot)和顶评(top)
         # 请求
@@ -52,40 +55,51 @@ class Comment(object):
             redis_util.saveUrl(redis_util.commentPrefix, str(music_id))
         else:
             print(url, " request error :", commentsJson)
-            return
+            return 0
         # 热评
         for item in commentsJson['hotComments']:
             self.dbsave(item, music_id)
         # 顶评
         for item in commentsJson['topComments']:
             self.dbsave(item, music_id)
+        # 普通评*100
+        for item in commentsJson['comments']:
+            self.dbsave(item, music_id)
         # 评论数
         total = commentsJson['total']
 
         def saveCommentSmallBatch(limit, offset):
+            # sb代表small batch
             # 请求
             r_sb = requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset})
             # 结果解析
             commentsJson_sb = json.loads(r_sb.text)
             # 普通评论
-            for item in commentsJson_sb['comments']:
-                self.dbsave(item, music_id)
+            for item_sb in commentsJson_sb['comments']:
+                self.dbsave(item_sb, music_id)
             # 请求完成后睡一秒 防作弊
             time.sleep(1)
 
         # 根据获取到的评论数分批访问
         full = 0  # 访问100个的次数
         leftover = 0  # 最后一次访问的评论数
-        if total < 100:
-            leftover = total
+        if total <= 0:
+            raise Exception("未知错误，获取评论数量失败")
+        elif total <= 100:
+            return self.commentsCount
         elif total >= 1000:
-            full = 10
+            full = 9
         else:
-            full = total // 100
-            leftover = total % 100
+            full = (total - 100) // 100
+            leftover = (total - 100) % 100
+        time.sleep(1)  # 第一次访问后暂停1秒
+        # 访问
         for i in range(full):
-            saveCommentSmallBatch(100, i * 100)
+            # print("访问sb中",i)
+            saveCommentSmallBatch(100, (i + 1) * 100)
+            time.sleep(1)  # 每次访问暂停1秒
         saveCommentSmallBatch(leftover, full * 100)
+        return self.commentsCount
 
     # 保存数据库
     def dbsave(self, item, music_id):
@@ -106,10 +120,11 @@ class Comment(object):
         try:
             # 持久化
             sql.insert_comment(commentId, music_id, content, likedCount, remarkTime, userId, nickname, userImg)
+            self.commentsCount += 1
         except Exception as e:
             # 打印错误日志
-            print(str(item), ' insert error : ', str(e))
-            time.sleep(1)
+            print('insert error : ', str(e))
+            # time.sleep(1)
 
 
 def saveCommentBatch(index):
@@ -119,7 +134,9 @@ def saveCommentBatch(index):
     print("index:", index, "offset:", offset, "musics :", len(musics), "start :", musics[0]['music_id'])
     for item in musics:
         try:
-            my_comment.saveComment(item['music_id'])
+            validNum = my_comment.saveComment(item['music_id'])
+            print("{}获取有效评论数：{}".format(item['music_id'], validNum))
+            # time.sleep(10)
         except Exception as e:
             # 打印错误日志
             print(' internal  error : ' + str(e))
@@ -147,6 +164,5 @@ def commentSpider():
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-
-if __name__ == '__main__':
-    commentSpider()
+# if __name__ == '__main__':
+#     commentSpider()
