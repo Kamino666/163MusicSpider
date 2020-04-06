@@ -4,9 +4,11 @@
 import datetime
 
 import requests
+import retrying
 import ujson
 
 from src import sql
+from src.util import proxy
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -25,16 +27,25 @@ headers = {
 
 
 def save_toplist():
-    params = None
-    print("== 爬取数据参数 ==", params)
-    r = requests.get('http://music.163.com/api/toplist/', headers=headers, params=params)
+    print("== 爬取数据参数 ==")
+
+    # 爬取
+    @retrying.retry(stop_max_attempt_number=5, wait_fixed=2000)
+    def get():
+        return requests.get('http://music.163.com/api/toplist/', headers=headers, timeout=6, proxies=proxy.proxy)
+
+    try:
+        r = get()
+    except Exception as e:
+        print("代理连接失败", e)
+        return
     # 网页解析
     toplistJson = ujson.loads(r.content.decode())
     for toplist in toplistJson["list"]:
         toplist_id = toplist["id"]
         toplist_name = toplist["name"]
         toplist_subscribedCount = toplist["subscribedCount"]
-        try:
+        try:  # sql 报错try
             sql.insert_toplist(toplist_id, toplist_name, toplist_subscribedCount)
         except Exception as e:
             # 打印错误日志

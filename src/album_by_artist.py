@@ -9,9 +9,11 @@ from concurrent.futures import ProcessPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
+import retrying
 
-from src import sql, redis_util
+from src import sql
 from src.util.user_agents import agents
+from src.util import proxy
 
 
 class Album(object):
@@ -38,18 +40,30 @@ class Album(object):
         self.headers["User-Agent"] = agent
         # 去redis验证是否爬取过
         url = 'http://music.163.com/artist/album?id=' + str(artist_id)
-        check = redis_util.checkIfRequest(redis_util.artistPrefix, url)
-        if check:
-            print("url:", url, "has request. pass")
-            time.sleep(2)
-            return
+
+        # check = redis_util.checkIfRequest(redis_util.artistPrefix, url)
+        # if check:
+        #     print("url:", url, "has request. pass")
+        #     time.sleep(2)
+        #     return
 
         # 访问
-        r = requests.get('http://music.163.com/artist/album', headers=self.headers, params=params)
+        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        def get():
+            return requests.get('http://music.163.com/artist/album', headers=self.headers, params=params
+                                , proxies=proxy.proxy)
+
+        try:
+            r = get()
+        except Exception as e:
+            print("代理连接失败", e)
+            return
+
+        # r = requests.get('http://music.163.com/artist/album', headers=self.headers, params=params)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
         # 保存redis去重缓存
-        redis_util.saveUrl(redis_util.artistPrefix, url)
+        # redis_util.saveUrl(redis_util.artistPrefix, url)
         # 所有图片
         imgs = soup.find_all('div', attrs={'class': 'u-cover u-cover-alb3'})
         # 专辑信息
@@ -93,10 +107,11 @@ def albumSpider():
     # 批次
     batch = math.ceil(artists_num.get('num') / 1000.0)
     # 构建线程池
-    pool = ProcessPoolExecutor(3)
+    # pool = ProcessPoolExecutor(3)
     for index in range(0, batch):
-        pool.submit(saveAlbumBatch, index)
-    pool.shutdown(wait=True)
+        saveAlbumBatch(index)
+        # pool.submit(saveAlbumBatch, index)
+    # pool.shutdown(wait=True)
     print("======= 结束爬 专辑 信息 ===========")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))

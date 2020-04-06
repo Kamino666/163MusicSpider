@@ -11,9 +11,11 @@ from concurrent.futures.process import ProcessPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
+import retrying
 
-from src import sql, redis_util
+from src import sql
 from src.util.user_agents import agents
+from src.util import proxy
 
 
 class Music(object):
@@ -73,21 +75,32 @@ class Music(object):
     def save_music_by_api(self, album_id):
         url = "http://music.163.com/api/album/" + str(album_id)
         # 去redis验证是否爬取过这个专辑
-        check = redis_util.checkIfRequest(redis_util.albumPrefix, str(album_id))
-        if check:
-            print("url:", url, "has request. pass")
-            time.sleep(1)
-            return
+        # check = redis_util.checkIfRequest(redis_util.albumPrefix, str(album_id))
+        # if check:
+        #     print("url:", url, "has request. pass")
+        #     time.sleep(1)
+        #     return
 
         # 访问
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
-        r = requests.get(url, headers=self.headers)
+
+        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        def get():
+            return requests.get(url, headers=self.headers, proxies=proxy.proxy)
+
+        try:
+            r = get()
+        except Exception as e:
+            print("代理连接失败", e)
+            return
+        # r = requests.get(url, headers=self.headers)
         # 解析
         album_json = json.loads(r.text)
-        # 保存redis去重缓存
+        # 保存redis去重缓存 放弃
         if album_json['code'] == 200:
-            redis_util.saveUrl(redis_util.albumPrefix, str(album_id))
+            # redis_util.saveUrl(redis_util.albumPrefix, str(album_id))
+            pass
         else:
             print(url, " request error :", album_json)
             return
@@ -100,7 +113,7 @@ class Music(object):
                 # 打印错误日志
                 print(music_id, music_name, album_id, ' insert db error: ', str(e))
                 # traceback.print_exc()
-                time.sleep(1)
+                # time.sleep(1)
 
 
 def saveMusicBatch(index):

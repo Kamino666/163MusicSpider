@@ -10,10 +10,11 @@ import traceback
 from concurrent.futures.process import ProcessPoolExecutor
 
 import requests
-from bs4 import BeautifulSoup
+import retrying
 
-from src import sql, redis_util
+from src import sql
 from src.util.user_agents import agents
+from src.util import proxy
 
 
 class Music(object):
@@ -36,11 +37,20 @@ class Music(object):
     # 调用网易云api爬取
     def save_music_by_api(self, toplist_id):
         url = "http://music.163.com/api/playlist/detail?id=" + str(toplist_id)
-
         # 访问
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
-        r = requests.get(url, headers=self.headers)
+
+        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        def get():
+            return requests.get(url, headers=self.headers, proxies=proxy.proxy)
+
+        try:
+            r = get()
+        except Exception as e:
+            print("代理连接失败", e)
+            return
+        # r = requests.get(url, headers=self.headers)
         # 解析
         toplist_json = ujson.loads(r.text)
         # 保存redis去重缓存
@@ -94,6 +104,5 @@ def musicSpider():
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-
-if __name__ == '__main__':
-    musicSpider()
+# if __name__ == '__main__':
+#     musicSpider()

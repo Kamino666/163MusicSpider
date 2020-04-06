@@ -7,9 +7,11 @@ import time
 
 import requests
 from bs4 import BeautifulSoup
+import retrying
 
 from src import sql
 from src.util import user_agents
+from src.util import proxy
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -36,7 +38,16 @@ def save_playlist(cat_url):
         params = None
         addparams = "&limit=" + "35" + "&offset=" + str(offset)
         url = "https://music.163.com" + cat_url + addparams
-        r = requests.get(url, headers=headers, params=params)
+
+        @retrying.retry(stop_max_attempt_number=5, wait_fixed=2000)
+        def get():
+            return requests.get(url, headers=headers, params=params, proxies=proxy.proxy)
+
+        try:
+            r = get()
+        except Exception as e:
+            print("代理连接失败", e)
+            return
         print("== 爬取数据url ==", url)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
@@ -66,7 +77,7 @@ def save_playlist(cat_url):
                 print(e)
         # 计算单页小于某一数值的歌单数量，若播放量少的歌单多，那就不爬下一页
         if weakCount / pageCount > 0.4:  # 出口2
-            print("风格歌单爬取到热门页")
+            print("风格歌单爬取到热门页，停止")
             break
 
 
@@ -75,7 +86,16 @@ def save_cat():
     url = "https://music.163.com/discover/playlist"
     agent = random.choice(user_agents.agents)
     headers['User-Agent'] = agent
-    r = requests.get(url, headers=headers)
+
+    @retrying.retry(stop_max_attempt_number=5, wait_fixed=2000)
+    def get():
+        return requests.get(url, headers=headers, proxies=proxy.proxy)
+
+    try:
+        r = get()
+    except Exception as e:
+        print("代理连接失败", e)
+        return
     # 解析
     soup = BeautifulSoup(r.content.decode(), 'html.parser')
     cats = soup.find_all('a', attrs={"class": "s-fc1"})
@@ -104,7 +124,8 @@ def playlistSpider():
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-# if __name__ == '__main__':
-#     playlistSpider()
+
+if __name__ == '__main__':
+    playlistSpider()
 # save_cat()
 # save_playlist("/discover/playlist/?cat=%E5%8D%8E%E8%AF%AD")

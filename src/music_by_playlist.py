@@ -11,9 +11,11 @@ from concurrent.futures.process import ProcessPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
+import retrying
 
 from src import sql, redis_util
 from src.util.user_agents import agents
+from src.util import proxy
 
 
 class Music(object):
@@ -40,7 +42,17 @@ class Music(object):
         # 访问
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
-        r = requests.get(url, headers=self.headers)
+
+        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        def get():
+            return requests.get(url, headers=self.headers, proxies=proxy.proxy)
+
+        try:
+            r = get()
+        except Exception as e:
+            print("代理连接失败", e)
+            return
+        # r = requests.get(url, headers=self.headers)
         # 解析
         album_json = json.loads(r.text)
         # 错误处理
@@ -52,7 +64,7 @@ class Music(object):
             music_name = item['name']
             try:
                 sql.insert_music(music_id, music_name, playlist_id)
-                print("sql success a song")
+                # print("sql success a song")
             except Exception as e:
                 # 打印错误日志
                 print(music_id, music_name, playlist_id, ' insert db error: ', str(e))

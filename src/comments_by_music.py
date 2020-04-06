@@ -9,9 +9,11 @@ import time
 from concurrent.futures.process import ProcessPoolExecutor
 
 import requests
+import retrying
 
 from src import sql, redis_util
 from src.util.user_agents import agents
+from src.util import proxy
 
 
 class Comment(object):
@@ -39,20 +41,32 @@ class Comment(object):
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
         url = 'http://music.163.com/api/v1/resource/comments/R_SO_4_' + str(music_id)
+
         # 去redis验证是否爬取过
-        check = redis_util.checkIfRequest(redis_util.commentPrefix, str(music_id))
-        if check:
-            print("url:", url, "has request. pass")
-            return 0
+        # check = redis_util.checkIfRequest(redis_util.commentPrefix, str(music_id))
+        # if check:
+        #     print("url:", url, "has request. pass")
+        #     return 0
 
         # 首次请求保存redis以及热评(hot)和顶评(top)
-        # 请求
-        r = requests.get(url, headers=self.headers, params=params)
+        # 访问
+        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        def get():
+            return requests.get(url, headers=self.headers, params=params, proxies=proxy.proxy)
+
+        try:
+            r = get()
+        except Exception as e:
+            print("代理连接失败", e)
+            return
+
+        # r = requests.get(url, headers=self.headers, params=params)
         # 结果解析
         commentsJson = json.loads(r.text)
         # 保存redis去重缓存
         if commentsJson['code'] == 200:
-            redis_util.saveUrl(redis_util.commentPrefix, str(music_id))
+            # redis_util.saveUrl(redis_util.commentPrefix, str(music_id))
+            pass
         else:
             print(url, " request error :", commentsJson)
             return 0
@@ -71,7 +85,18 @@ class Comment(object):
         def saveCommentSmallBatch(limit, offset):
             # sb代表small batch
             # 请求
-            r_sb = requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset})
+            @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+            def get_sb():
+                return requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset}
+                                    , proxies=proxy.proxy)
+
+            try:
+                r_sb = get_sb()
+            except Exception as e_sb:
+                print("代理连接失败", e_sb)
+                return
+
+            # r_sb = requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset})
             # 结果解析
             commentsJson_sb = json.loads(r_sb.text)
             # 普通评论

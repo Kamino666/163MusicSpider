@@ -5,8 +5,10 @@ import datetime
 
 import requests
 from bs4 import BeautifulSoup
+import retrying
 
 from src import sql
+from src.util import proxy
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -27,7 +29,19 @@ headers = {
 def save_artist(group_id, initial):
     params = {'id': group_id, 'initial': initial}
     print("== 爬取数据参数 ==", params)
-    r = requests.get('https://music.163.com/discover/artist/cat', headers=headers, params=params)
+
+    # 访问
+    @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+    def get():
+        return requests.get('https://music.163.com/discover/artist/cat', headers=headers, params=params,
+                            proxies=proxy.proxy)
+
+    try:
+        r = get()
+    except Exception as e:
+        print("代理连接失败", e)
+        return
+    # r = requests.get('https://music.163.com/discover/artist/cat', headers=headers, params=params)
     # 网页解析
     soup = BeautifulSoup(r.content.decode(), 'html.parser')
     # print(soup)
