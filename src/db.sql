@@ -56,6 +56,7 @@ CREATE TABLE `toplists` (
 CREATE TABLE `playlists` (
   `playlist_id` bigint(20) NOT NULL,
   `name` varchar(255) DEFAULT NULL,
+  `playCount` int DEFAULT NULL ,
   `subscribedCount` varchar(255) DEFAULT NULL,
   `img_url` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`playlist_id`)

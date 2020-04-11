@@ -1,0 +1,37 @@
+{
+  "thread": {
+    "artists": 1,
+    "toplists": 1,
+    "playlists": 1,
+    "album_by_artist": 1,
+    "music_by_album": 1,
+    "music_by_playlist": 1,
+    "music_by_toplist": 1,
+    "comments_by_music": 1
+  },
+  "batch": {
+    "album_by_artist": 1000,
+    "music_by_album": 1000,
+    "music_by_playlist": 1000,
+    "music_by_toplist": 1000,
+    "comments_by_music": 1000
+  },
+  "MySQL": {
+    "host": "localhost",
+    "user": "root",
+    "password": "123456",
+    "db": "test",
+    "charset": "utf8mb4"
+  },
+  "proxy": {
+    "activate": true,
+    "max_proxy_num": 100
+  },
+  "comments": {
+    "max_comment_num_of_a_music": 1000
+  },
+  "connect": {
+    "max_retries": 2,
+    "interval": 1000
+  }
+}

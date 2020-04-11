@@ -5,12 +5,15 @@ import time
 
 import ujson
 
+from src.util import settings
+
 proxy = {}
 VALID_PROXY = [True, True]
 VALID_HTTP_ONLY_PROXY = [True, False]
 VALID_HTTPS_ONLY_PROXY = [False, True]
 
 
+# TODO(Kamino): 提供单独ip、网络API获取代理、本地文件获取代理、不使用代理的接口
 # 网络API获得代理
 def getFromWeb():
     """
@@ -31,6 +34,7 @@ def getFromWeb():
 
 # 本地文件API
 def getFromFile():
+    path = os.path.join(os.path.abspath("."), os.pardir, "conf", "proxies.json")
     pass
 
 
@@ -64,7 +68,7 @@ def testProxy(timeout=6):
     except requests.HTTPError as e:
         print("返回码错误", e)
         rslt[1] = False
-    except requests.ConnectTimeout:
+    except requests.ConnectTimeout as e:
         print("连接超时")
         rslt[1] = False
     except requests.ConnectionError as e:
@@ -95,14 +99,21 @@ def changeProxy():
     proxy = newproxy
 
 
-if len(proxy) == 0:
-    print("初始化代理")
-    changeProxy()
-    if testProxy() == [True, True]:
-        print("初始化代理有效:", str(proxy))
-    print("初始化代理检测器")
-    detector = Thread(target=proxy_detector)
-    detector.start()
+if settings.proxy["activate"]:
+    print("开启使用代理模式")
+    if len(proxy) == 0:
+        print("初始化代理中")
+        changeProxy()
+        if testProxy() == [True, True]:  # 最多就重试一次
+            print("初始化代理有效:", str(proxy))
+        else:
+            print("初始化代理无效{}，重试", str(proxy))
+            changeProxy()
+        print("初始化代理检测器")
+        detector = Thread(target=proxy_detector)
+        detector.start()
+else:
+    print("开启不使用代理模式")
 
 # if __name__ == "__main__":
 #     changeProxy()
