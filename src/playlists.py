@@ -4,6 +4,9 @@
 import datetime
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import math
 
 import requests
 from bs4 import BeautifulSoup
@@ -12,6 +15,7 @@ import retrying
 from src import sql
 from src.util import user_agents
 from src.util import proxy
+from src.util import settings
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -39,7 +43,8 @@ def save_playlist(cat_url):
         addparams = "&limit=" + "35" + "&offset=" + str(offset)
         url = "https://music.163.com" + cat_url + addparams
 
-        @retrying.retry(stop_max_attempt_number=5, wait_fixed=2000)
+        @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                        wait_fixed=settings.connect["interval"])
         def get():
             return requests.get(url, headers=headers, params=params, proxies=proxy.proxy)
 
@@ -70,15 +75,23 @@ def save_playlist(cat_url):
                 weakCount += 1
             pageCount += 1
             try:
+                sql.conn_lock.acquire()  # 取得锁
                 sql.insert_playlist(playlist_id, playlist_name, playCount, img_url)
                 # print("sql success")
             except Exception as e:
                 # 打印错误日志
                 print(e)
+            finally:
+                sql.conn_lock.release()
         # 计算单页小于某一数值的歌单数量，若播放量少的歌单多，那就不爬下一页
         if weakCount / pageCount > 0.4:  # 出口2
             print("风格歌单爬取到热门页，停止")
             break
+
+
+def save_playlist_batch(catTmpList):
+    for i in catTmpList:
+        save_playlist(i)
 
 
 def save_cat():
@@ -87,7 +100,7 @@ def save_cat():
     agent = random.choice(user_agents.agents)
     headers['User-Agent'] = agent
 
-    @retrying.retry(stop_max_attempt_number=5, wait_fixed=2000)
+    @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
     def get():
         return requests.get(url, headers=headers, proxies=proxy.proxy)
 
@@ -113,10 +126,20 @@ def playlistSpider():
     try:
         save_cat()
         print("获取到{}个歌单分类".format(len(catList)))
-        for i in catList:
-            save_playlist(i)
-            # 延时
-            time.sleep(1)
+        pool = ThreadPoolExecutor(max_workers=settings.thread["playlists"])
+        print("歌单正在{}线程爬取".format(settings.thread["playlists"]))
+        # 分批
+        playlist_batch_size = settings.batch["playlists"]
+        batch_num = math.ceil(len(catList) / playlist_batch_size)
+        future_list = []
+        for i in range(batch_num):
+            fut = pool.submit(save_playlist_batch, catTmpList=catList[
+                                                              i * settings.batch["playlists"]:i * settings.batch[
+                                                                  "playlists"] + settings.batch["playlists"]])
+            future_list.append(fut)
+        for fut in future_list:  # 等待结果
+            fut.result()
+        pool.shutdown()
     except Exception as e:
         print(e)
     print("======= 结束爬 歌单 信息 =======")

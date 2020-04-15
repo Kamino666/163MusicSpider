@@ -2,6 +2,8 @@
 获取所有的榜单信息
 """
 import datetime
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 import requests
 import retrying
@@ -9,6 +11,7 @@ import ujson
 
 from src import sql
 from src.util import proxy
+from src.util import settings
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -30,9 +33,10 @@ def save_toplist():
     print("== 爬取数据参数 ==")
 
     # 爬取
-    @retrying.retry(stop_max_attempt_number=5, wait_fixed=2000)
+    @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
     def get():
-        return requests.get('http://music.163.com/api/toplist/', headers=headers, timeout=6, proxies=proxy.proxy)
+        return requests.get('http://music.163.com/api/toplist/', headers=headers, timeout=settings.connect["timeout"],
+                            proxies=proxy.proxy)
 
     try:
         r = get()
@@ -46,17 +50,23 @@ def save_toplist():
         toplist_name = toplist["name"]
         toplist_subscribedCount = toplist["subscribedCount"]
         try:  # sql 报错try
+            sql.conn_lock.acquire()
             sql.insert_toplist(toplist_id, toplist_name, toplist_subscribedCount)
         except Exception as e:
             # 打印错误日志
             print(e)
+        finally:
+            sql.conn_lock.release()
 
 
 def toplistSpider():
     print("======= 开始爬 榜单 信息 =======")
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
-    save_toplist()
+    print("榜单正在{}线程爬取".format(settings.thread["toplists"]))
+    pool = ThreadPoolExecutor(max_workers=settings.thread["toplists"])
+    pool.submit(save_toplist)
+    pool.shutdown()
     print("======= 结束爬 榜单 信息 =======")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))

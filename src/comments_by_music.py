@@ -6,14 +6,15 @@ import json
 import math
 import random
 import time
-from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 import retrying
 
-from src import sql, redis_util
+from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
+from src.util import settings
 
 
 class Comment(object):
@@ -50,7 +51,8 @@ class Comment(object):
 
         # 首次请求保存redis以及热评(hot)和顶评(top)
         # 访问
-        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                        wait_fixed=settings.connect["interval"])
         def get():
             return requests.get(url, headers=self.headers, params=params, proxies=proxy.proxy)
 
@@ -63,7 +65,7 @@ class Comment(object):
         # r = requests.get(url, headers=self.headers, params=params)
         # 结果解析
         commentsJson = json.loads(r.text)
-        # 保存redis去重缓存
+        # 保存redis去重缓存 放弃
         if commentsJson['code'] == 200:
             # redis_util.saveUrl(redis_util.commentPrefix, str(music_id))
             pass
@@ -83,9 +85,16 @@ class Comment(object):
         total = commentsJson['total']
 
         def saveCommentSmallBatch(limit, offset):
+            """
+            :param limit: 一次获取的数量
+            :param offset: 偏移
+            :return:
+            """
+
             # sb代表small batch
             # 请求
-            @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+            @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                            wait_fixed=settings.connect["interval"])
             def get_sb():
                 return requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset}
                                     , proxies=proxy.proxy)
@@ -110,15 +119,15 @@ class Comment(object):
         leftover = 0  # 最后一次访问的评论数
         if total <= 0:
             raise Exception("未知错误，获取评论数量失败")
-        elif total <= 100:
+        elif total <= 100:  # 评论数小于100时
             return self.commentsCount
-        elif total >= 1000:
-            full = 9
-        else:
+        elif total >= settings.comments["max_comment_num_of_a_music"]:  # 评论数大于最大获取数时
+            full = settings.comments["max_comment_num_of_a_music"] // 100 - 1
+        else:  # 评论数位于100和max之间
             full = (total - 100) // 100
             leftover = (total - 100) % 100
         time.sleep(1)  # 第一次访问后暂停1秒
-        # 访问
+        # 访问 先访问完full，再访问一次leftover
         for i in range(full):
             # print("访问sb中",i)
             saveCommentSmallBatch(100, (i + 1) * 100)
@@ -144,19 +153,25 @@ class Comment(object):
         commentId = item['commentId']
         try:
             # 持久化
+            sql.conn_lock.acquire()
             sql.insert_comment(commentId, music_id, content, likedCount, remarkTime, userId, nickname, userImg)
             self.commentsCount += 1
         except Exception as e:
             # 打印错误日志
             print('insert error : ', str(e))
             # time.sleep(1)
+        finally:
+            sql.conn_lock.release()
 
 
-def saveCommentBatch(index):
+def saveCommentBatch(index, batch_size):
     my_comment = Comment()
-    offset = 1000 * index
-    musics = sql.get_music_page(offset, 1000)
-    print("index:", index, "offset:", offset, "musics :", len(musics), "start :", musics[0]['music_id'])
+    try:
+        sql.conn_lock.acquire()
+        musics = sql.get_music_page(index, batch_size)
+    finally:
+        sql.conn_lock.release()
+    print("index:", index, "batch_size:", batch_size, "musics :", len(musics), "start :", musics[0]['music_id'])
     for item in musics:
         try:
             validNum = my_comment.saveComment(item['music_id'])
@@ -175,15 +190,25 @@ def commentSpider():
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
     # 所有歌曲数量
-    musics_num = sql.get_all_music_num()
-    # 批次
-    batch = math.ceil(musics_num.get('num') / 1000.0)
+    try:
+        sql.conn_lock.acquire()
+        musics_num = sql.get_all_music_num()['num']
+    finally:
+        sql.conn_lock.release()
+    # 分批
+    music_batch_size = settings.batch["comments_by_music"]
+    batch_num = math.ceil(musics_num / music_batch_size)
+    future_list = []
     # 构建线程池
-    # pool = ProcessPoolExecutor(1)
-    for index in range(0, batch):
-        saveCommentBatch(index)
-        # pool.submit(saveCommentBatch, index)
-    # pool.shutdown(wait=True)
+    pool = ThreadPoolExecutor(max_workers=settings.thread["comments_by_music"])
+    print("正在{}线程爬取评论".format(settings.thread["comments_by_music"]))
+    for i in range(batch_num):
+        # saveMusicBatch(index)
+        fut = pool.submit(saveCommentBatch, i * music_batch_size, music_batch_size)
+        future_list.append(fut)
+    for fut in future_list:
+        fut.result()
+    pool.shutdown()
     print("======= 结束爬 评论 信息 ===========")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))

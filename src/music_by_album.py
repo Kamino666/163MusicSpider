@@ -7,7 +7,7 @@ import math
 import random
 import time
 import traceback
-from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
@@ -16,6 +16,7 @@ import retrying
 from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
+from src.util import settings
 
 
 class Music(object):
@@ -43,11 +44,11 @@ class Music(object):
         self.headers["User-Agent"] = agent
         url = 'https://music.163.com/album?id=' + str(album_id)
         # 去redis验证是否爬取过这个专辑
-        check = redis_util.checkIfRequest(redis_util.albumPrefix, url)
-        if check:
-            print("url:", url, "has request. pass")
-            time.sleep(1)
-            return
+        # check = redis_util.checkIfRequest(redis_util.albumPrefix, url)
+        # if check:
+        #     print("url:", url, "has request. pass")
+        #     time.sleep(1)
+        #     return
 
         # 访问
         r = requests.get('https://music.163.com/album', headers=self.headers, params=params)
@@ -55,7 +56,7 @@ class Music(object):
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
         body = soup.body
         # 保存redis去重缓存
-        redis_util.saveUrl(redis_util.albumPrefix, url)
+        # redis_util.saveUrl(redis_util.albumPrefix, url)
         musics = body.find('ul', attrs={'class': 'f-hide'}).find_all('li')  # 获取专辑的所有音乐
         if len(musics) == 0:
             return
@@ -85,7 +86,8 @@ class Music(object):
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
 
-        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                        wait_fixed=settings.connect["interval"])
         def get():
             return requests.get(url, headers=self.headers, proxies=proxy.proxy)
 
@@ -108,19 +110,25 @@ class Music(object):
             music_id = item['id']
             music_name = item['name']
             try:
+                sql.conn_lock.acquire()
                 sql.insert_music(music_id, music_name, album_id)
             except Exception as e:
                 # 打印错误日志
                 print(music_id, music_name, album_id, ' insert db error: ', str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
+            finally:
+                sql.conn_lock.release()
 
 
-def saveMusicBatch(index):
+def saveMusicBatch(index, batch_size):
     my_music = Music()
-    offset = 1000 * index
-    albums = sql.get_album_page(offset, 1000)
-    print("index:", index, "offset:", offset, " albums :", len(albums), "start")
+    try:
+        sql.conn_lock.acquire()
+        albums = sql.get_album_page(index, batch_size)
+    finally:
+        sql.conn_lock.release()
+    print("index:", index, "batch_size:", batch_size, " albums :", len(albums), "start")
     for i in albums:
         try:
             # 调用网易云api爬取
@@ -140,20 +148,31 @@ def musicSpider():
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
     # 所有专辑数量
-    albums_num = sql.get_all_album_num()
+    try:
+        sql.conn_lock.acquire()
+        albums_num = sql.get_all_album_num().get('num')
+    finally:
+        sql.conn_lock.release()
     print("所有专辑数量：", albums_num)
-    # 批次
-    batch = math.ceil(albums_num.get('num') / 1000.0)
+    # 分批
+    album_batch_size = settings.batch["music_by_album"]
+    batch_num = math.ceil(albums_num / album_batch_size)
+    future_list = []
     # 构建线程池
-    # pool = ProcessPoolExecutor(1)
-    for index in range(0, batch):
-        saveMusicBatch(index)
-        # pool.submit(saveMusicBatch, index)
-    # pool.shutdown(wait=True)
+    pool = ThreadPoolExecutor(max_workers=settings.thread["music_by_album"])
+    print("正在{}线程爬取专辑".format(settings.thread["music_by_album"]))
+    for i in range(batch_num):
+        # saveMusicBatch(index)
+        fut = pool.submit(saveMusicBatch, i * album_batch_size, album_batch_size)
+        future_list.append(fut)
+    for fut in future_list:
+        fut.result()
+    pool.shutdown()
     print("======= 结束爬 音乐 信息 ===========")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-# if __name__ == '__main__':
-#     musicSpider()
+
+if __name__ == '__main__':
+    musicSpider()

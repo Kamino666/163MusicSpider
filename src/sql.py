@@ -2,6 +2,7 @@
 一般 Python 用于连接 MySQL 的工具：pymysql
 """
 import pymysql.cursors
+from threading import Lock
 
 connection = pymysql.connect(host='localhost',
                              user='root',
@@ -9,6 +10,8 @@ connection = pymysql.connect(host='localhost',
                              db='test',
                              charset='utf8mb4',
                              cursorclass=pymysql.cursors.DictCursor)
+# 防止多线程用同一个connection导致的错误
+conn_lock = Lock()
 
 
 # 保存评论

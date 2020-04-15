@@ -1,20 +1,21 @@
 {
   "thread": {
-    "artists": 1,
+    "artists": 2,
     "toplists": 1,
-    "playlists": 1,
-    "album_by_artist": 1,
-    "music_by_album": 1,
-    "music_by_playlist": 1,
-    "music_by_toplist": 1,
-    "comments_by_music": 1
+    "playlists": 2,
+    "album_by_artist": 2,
+    "music_by_album": 2,
+    "music_by_playlist": 2,
+    "comments_by_music": 2
   },
   "batch": {
-    "album_by_artist": 1000,
-    "music_by_album": 1000,
-    "music_by_playlist": 1000,
+    "playlists": 5,
+    "artists": 5,
+    "album_by_artist": 100,
+    "music_by_album": 200,
+    "music_by_playlist": 100,
     "music_by_toplist": 1000,
-    "comments_by_music": 1000
+    "comments_by_music": 100
   },
   "MySQL": {
     "host": "localhost",
@@ -24,7 +25,7 @@
     "charset": "utf8mb4"
   },
   "proxy": {
-    "activate": true,
+    "activate": false,
     "max_proxy_num": 100
   },
   "comments": {
@@ -32,6 +33,7 @@
   },
   "connect": {
     "max_retries": 2,
-    "interval": 1000
+    "interval": 1000,
+    "timeout": 5
   }
 }

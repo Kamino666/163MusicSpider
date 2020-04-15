@@ -48,16 +48,16 @@ def testProxy(timeout=6):
         if http.text.replace("\n", "") != proxy['http'].split(":")[0]:
             rslt[0] = False
     except requests.HTTPError as e:
-        print("返回码错误", e)
+        print("检测返回码错误", e)
         rslt[0] = False
     except requests.exceptions.ReadTimeout:
-        print("连接超时")
+        print("检测连接超时")
         rslt[0] = False
     except requests.ConnectionError as e:
-        print("连接错误", e)
+        print("检测连接错误", e)
         rslt[0] = False
     except Exception as e:
-        print("未知错误", e)
+        print("检测未知错误", e)
         rslt[0] = False
     # https检测
     try:
@@ -66,16 +66,16 @@ def testProxy(timeout=6):
         if https.text.replace("\n", "") != proxy['https'].split(":")[0]:
             rslt[1] = False
     except requests.HTTPError as e:
-        print("返回码错误", e)
+        print("检测返回码错误", e)
         rslt[1] = False
     except requests.ConnectTimeout as e:
-        print("连接超时")
+        print("检测连接超时")
         rslt[1] = False
     except requests.ConnectionError as e:
-        print("连接错误", e)
+        print("检测连接错误", e)
         rslt[1] = False
     except Exception as e:
-        print("未知错误", e)
+        print("检测未知错误", e)
         rslt[1] = False
 
     return rslt

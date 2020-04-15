@@ -7,15 +7,16 @@ import math
 import random
 import time
 import traceback
-from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
 import retrying
 
-from src import sql, redis_util
+from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
+from src.util import settings
 
 
 class Music(object):
@@ -43,7 +44,8 @@ class Music(object):
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
 
-        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                        wait_fixed=settings.connect["interval"])
         def get():
             return requests.get(url, headers=self.headers, proxies=proxy.proxy)
 
@@ -63,6 +65,7 @@ class Music(object):
             music_id = item['id']
             music_name = item['name']
             try:
+                sql.conn_lock.acquire()
                 sql.insert_music(music_id, music_name, playlist_id)
                 # print("sql success a song")
             except Exception as e:
@@ -70,14 +73,19 @@ class Music(object):
                 print(music_id, music_name, playlist_id, ' insert db error: ', str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
+            finally:
+                sql.conn_lock.release()
 
 
-# 爬取一批歌单 播放量高优先
-def saveMusicBatch(index):
+# 爬取一批歌单
+def saveMusicBatch(index, batch_size):
     my_music = Music()
-    offset = 1000 * index
-    playlists = sql.get_playlist_page(offset, 1000)
-    print("index:", index, "offset:", offset, " playlists :", len(playlists), "start")
+    try:
+        sql.conn_lock.acquire()
+        playlists = sql.get_playlist_page(index, batch_size)
+    finally:
+        sql.conn_lock.release()
+    print("index:", index, "batch_size:", batch_size, " playlists :", len(playlists), "start")
     for i in playlists:
         try:
             # 调用网易云api爬取
@@ -98,14 +106,20 @@ def musicSpider():
     # 所有歌单数量
     playlists_num = sql.get_playlists_num()['num']
     print("所有歌单数量：", playlists_num)
-    # 批次
-    batch = math.ceil(playlists_num / 1000.0)
+    # 分批
+    playlist_batch_size = settings.batch["music_by_playlist"]
+    batch_num = math.ceil(playlists_num / playlist_batch_size)
+    future_list = []
     # 构建线程池
-    # pool = ProcessPoolExecutor(1)
-    for index in range(0, batch):
-        saveMusicBatch(index)
-        # pool.submit(saveMusicBatch, index)
-    # pool.shutdown(wait=True)
+    pool = ThreadPoolExecutor(max_workers=settings.thread["music_by_playlist"])
+    print("正在{}线程爬取专辑".format(settings.thread["music_by_playlist"]))
+    for i in range(batch_num):
+        # saveMusicBatch(index)
+        fut = pool.submit(saveMusicBatch, i * playlist_batch_size, playlist_batch_size)
+        future_list.append(fut)
+    for fut in future_list:
+        fut.result()
+    pool.shutdown()
     print("======= 结束爬 音乐 信息 ===========")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))

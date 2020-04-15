@@ -2,6 +2,9 @@
 获取所有的歌手信息
 """
 import datetime
+import math
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 import requests
 from bs4 import BeautifulSoup
@@ -9,6 +12,7 @@ import retrying
 
 from src import sql
 from src.util import proxy
+from src.util import settings
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -31,7 +35,7 @@ def save_artist(group_id, initial):
     print("== 爬取数据参数 ==", params)
 
     # 访问
-    @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+    @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
     def get():
         return requests.get('https://music.163.com/discover/artist/cat', headers=headers, params=params,
                             proxies=proxy.proxy)
@@ -49,12 +53,12 @@ def save_artist(group_id, initial):
     hot_artists = soup.find_all('a', attrs={'class': 'msk'})
     artists = soup.find_all('a', attrs={'class': 'nm nm-icn f-thide s-fc0'})
 
-    if not group_id:
+    if not group_id:  # 假如group_id空
         for label in labels:
             try:
                 group_id = label['data-cat']
-                if group_id:
-                    labelList.add(group_id)
+                if group_id:  # 获取成功
+                    labelList.append(group_id)
             except KeyError as e:
                 # error: has not attribute
                 print(e)
@@ -64,32 +68,50 @@ def save_artist(group_id, initial):
         artist_id = artist['href'].replace('/artist?id=', '').strip()
         artist_name = artist['title'].replace('的音乐', '')
         try:
+            sql.conn_lock.acquire()
             sql.insert_artist(artist_id, artist_name)
         except Exception as e:
             # 打印错误日志
             print(e)
+        finally:
+            sql.conn_lock.release()
 
     for artist in artists:
         artist_id = artist['href'].replace('/artist?id=', '').strip()
         artist_name = artist['title'].replace('的音乐', '')
         try:
+            sql.conn_lock.acquire()
             sql.insert_artist(artist_id, artist_name)
         except Exception as e:
             # 打印错误日志
             print(e)
+        finally:
+            sql.conn_lock.release()
 
 
-labelList = set([])
+labelList = []
 
 
 def artistSpider():
     print("======= 开始爬 歌手 信息 =======")
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
-    save_artist(None, None)
-    for i in labelList:
-        for j in range(65, 91):
-            save_artist(i, j)
+    save_artist(None, None)  # 存储分类信息
+    pool = ThreadPoolExecutor(max_workers=settings.thread["artists"])
+    # 分批
+    artist_batch_size = settings.batch["artists"]
+    batch_num = math.ceil(len(labelList) / artist_batch_size)
+    future_list = []
+    for x in range(batch_num):
+        for i in labelList[x * settings.batch["artists"]:x * settings.batch["artists"] + settings.batch["artists"]]:
+            for j in range(65, 91):
+                # 多线程
+                fut = pool.submit(save_artist, i, j)
+                # save_artist(i, j)
+                future_list.append(fut)
+    for fut in future_list:  # 等待结束
+        fut.result()
+    pool.shutdown()  # 关闭线程池
     print("======= 结束爬 歌手 信息 =======")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))

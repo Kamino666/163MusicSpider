@@ -5,7 +5,7 @@ import datetime
 import math
 import random
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
@@ -14,6 +14,7 @@ import retrying
 from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
+from src.util import settings
 
 
 class Album(object):
@@ -48,7 +49,8 @@ class Album(object):
         #     return
 
         # 访问
-        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                        wait_fixed=settings.connect["interval"])
         def get():
             return requests.get('http://music.163.com/artist/album', headers=self.headers, params=params
                                 , proxies=proxy.proxy)
@@ -76,18 +78,24 @@ class Album(object):
             # 专辑图片地址
             img_url = imgs[index].img.get('src').replace('?param=120y120', '')
             try:
+                sql.conn_lock.acquire()
                 sql.insert_album(album_id, artist_id, imgs[index].get('title'), img_url)
             except Exception as e:
                 # 打印错误日志
                 print(str(album) + ' insert error : ' + str(e))
                 time.sleep(1)
+            finally:
+                sql.conn_lock.release()
 
 
-def saveAlbumBatch(index):
+def saveAlbumBatch(index, batch_size):
     my_album = Album()
-    offset = 1000 * index
-    artists = sql.get_artist_page(offset, 1000)
-    print("index:", index, "offset:", offset, "artists :", len(artists), "start")
+    try:
+        sql.conn_lock.acquire()
+        artists = sql.get_artist_page(index, batch_size)
+    finally:
+        sql.conn_lock.release()
+    print("index:", index, "batch_size:", batch_size, "artists :", len(artists), "start")
     for i in artists:
         try:
             my_album.saveAlbums(i['artist_id'])
@@ -104,18 +112,26 @@ def albumSpider():
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
     # 所有歌手数量
     artists_num = sql.get_all_artist_num()
-    # 批次
-    batch = math.ceil(artists_num.get('num') / 1000.0)
+    # batch = math.ceil(artists_num.get('num') / 1000.0)
+    # 分批
+    artist_batch_size = settings.batch["album_by_artist"]
+    batch_num = math.ceil(artists_num.get('num') / artist_batch_size)
+    future_list = []
     # 构建线程池
-    # pool = ProcessPoolExecutor(3)
-    for index in range(0, batch):
-        saveAlbumBatch(index)
-        # pool.submit(saveAlbumBatch, index)
-    # pool.shutdown(wait=True)
+    pool = ThreadPoolExecutor(max_workers=settings.thread["album_by_artist"])
+    print("正在{}线程爬取专辑".format(settings.thread["album_by_artist"]))
+    for i in range(batch_num):
+        # saveAlbumBatch(i*playlist_batch_size, playlist_batch_size)
+        fut = pool.submit(saveAlbumBatch, i * artist_batch_size, artist_batch_size)
+        future_list.append(fut)
+    for fut in future_list:
+        fut.result()
+    pool.shutdown()
     print("======= 结束爬 专辑 信息 ===========")
     endTime = datetime.datetime.now()
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-# if __name__ == '__main__':
-#     albumSpider()
+
+if __name__ == '__main__':
+    albumSpider()

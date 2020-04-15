@@ -15,6 +15,7 @@ import retrying
 from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
+from src.util import settings
 
 
 class Music(object):
@@ -41,7 +42,8 @@ class Music(object):
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
 
-        @retrying.retry(stop_max_attempt_number=5, wait_fixed=1000)
+        @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
+                        wait_fixed=settings.connect["interval"])
         def get():
             return requests.get(url, headers=self.headers, proxies=proxy.proxy)
 
@@ -65,17 +67,24 @@ class Music(object):
             music_name = item['name']
             album_id = item['album']['id']
             try:
+                sql.conn_lock.acquire()
                 sql.insert_music(music_id, music_name, album_id)
             except Exception as e:
                 # 打印错误日志
                 print(music_id, music_name, toplist_id, ' insert db error: ', str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
+            finally:
+                sql.conn_lock.release()
 
 
 def saveMusicByToplist():
     my_music = Music()
-    toplists = sql.get_toplists()
+    try:
+        sql.conn_lock.acquire()
+        toplists = sql.get_toplists()  # 获取所有榜单信息
+    finally:
+        sql.conn_lock.release()
     print("total:", len(toplists), "toplists", "start")
     for i in toplists:
         try:
@@ -96,7 +105,11 @@ def musicSpider():
     startTime = datetime.datetime.now()
     print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
     # 所有榜单数量
-    toplists_num = sql.get_toplists_num()
+    try:
+        sql.conn_lock.acquire()
+        toplists_num = sql.get_toplists_num()
+    finally:
+        sql.conn_lock.release()
     print("所有榜单数量：", toplists_num)
     saveMusicByToplist()
     print("======= 结束爬 音乐 信息 ===========")
