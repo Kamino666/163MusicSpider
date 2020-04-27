@@ -72,5 +72,5 @@ def toplistSpider():
     print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
     print("耗时：", (endTime - startTime).seconds, "秒")
 
-# if __name__ == '__main__':
-#     toplistSpider()
+if __name__ == '__main__':
+    toplistSpider()

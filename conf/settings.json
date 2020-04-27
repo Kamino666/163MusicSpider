@@ -25,7 +25,8 @@
     "charset": "utf8mb4"
   },
   "proxy": {
-    "activate": false,
+    "activate": true,
+    "mode": "file",
     "max_proxy_num": 100
   },
   "comments": {
