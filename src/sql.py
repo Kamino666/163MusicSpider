@@ -1,3 +1,4 @@
+# coding=UTF-8
 """
 一般 Python 用于连接 MySQL 的工具：pymysql
 """

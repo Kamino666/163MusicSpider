@@ -1,3 +1,4 @@
+# coding=UTF-8
 import ujson
 import pymysql
 import retrying
