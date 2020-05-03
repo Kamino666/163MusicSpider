@@ -7,6 +7,7 @@ import math
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
+import logging
 
 import requests
 import retrying
@@ -15,6 +16,8 @@ from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
 from src.util import settings
+
+logger = logging.getLogger('MusicSpider')
 
 
 class Comment(object):
@@ -43,13 +46,6 @@ class Comment(object):
         self.headers["User-Agent"] = agent
         url = 'http://music.163.com/api/v1/resource/comments/R_SO_4_' + str(music_id)
 
-        # 去redis验证是否爬取过
-        # check = redis_util.checkIfRequest(redis_util.commentPrefix, str(music_id))
-        # if check:
-        #     print("url:", url, "has request. pass")
-        #     return 0
-
-        # 首次请求保存redis以及热评(hot)和顶评(top)
         # 访问
         @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
                         wait_fixed=settings.connect["interval"])
@@ -59,7 +55,7 @@ class Comment(object):
         try:
             r = get()
         except Exception as e:
-            print("代理连接失败", e)
+            logger.critical("代理连接失败" + str(e))
             return
 
         # r = requests.get(url, headers=self.headers, params=params)
@@ -70,7 +66,7 @@ class Comment(object):
             # redis_util.saveUrl(redis_util.commentPrefix, str(music_id))
             pass
         else:
-            print(url, " request error :", commentsJson)
+            logger.error("{} request error :{}".format(url, commentsJson))
             return 0
         # 热评
         for item in commentsJson['hotComments']:
@@ -102,7 +98,7 @@ class Comment(object):
             try:
                 r_sb = get_sb()
             except Exception as e_sb:
-                print("代理连接失败", e_sb)
+                logger.critical("代理连接失败" + str(e_sb))
                 return
 
             # r_sb = requests.get(url, headers=self.headers, params={'limit': limit, 'offset': offset})
@@ -111,8 +107,6 @@ class Comment(object):
             # 普通评论
             for item_sb in commentsJson_sb['comments']:
                 self.dbsave(item_sb, music_id)
-            # 请求完成后睡一秒 防作弊
-            time.sleep(1)
 
         # 根据获取到的评论数分批访问
         full = 0  # 访问100个的次数
@@ -158,7 +152,7 @@ class Comment(object):
             self.commentsCount += 1
         except Exception as e:
             # 打印错误日志
-            print('insert error : ', str(e))
+            logger.debug('insert error : ' + str(e))
             # time.sleep(1)
         finally:
             sql.conn_lock.release()
@@ -166,29 +160,28 @@ class Comment(object):
 
 def saveCommentBatch(index, batch_size):
     my_comment = Comment()
+    allValidNum = 0
     try:
         sql.conn_lock.acquire()
         musics = sql.get_music_page(index, batch_size)
     finally:
         sql.conn_lock.release()
-    print("index:", index, "batch_size:", batch_size, "musics :", len(musics), "start :", musics[0]['music_id'])
+    logger.info("index:{} batch_size:{} 开始".format(index, batch_size))
     for item in musics:
         try:
             validNum = my_comment.saveComment(item['music_id'])
-            print("{}获取有效评论数：{}".format(item['music_id'], validNum))
+            allValidNum += validNum
             # time.sleep(10)
         except Exception as e:
             # 打印错误日志
-            print(' internal  error : ' + str(e))
-            # traceback.print_exc()
-            time.sleep(2)
-    print("index:", index, "finished")
+            logger.error(' internal  error : ' + str(e))
+    logger.info("index:{} batch_size:{} 结束，共获取有效评论{}条".format(index, batch_size, allValidNum))
 
 
 def commentSpider():
-    print("======= 开始爬 评论 信息 ===========")
+    logger.info("======= 开始爬 评论 信息 ===========")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
+
     # 所有歌曲数量
     try:
         sql.conn_lock.acquire()
@@ -201,7 +194,7 @@ def commentSpider():
     future_list = []
     # 构建线程池
     pool = ThreadPoolExecutor(max_workers=settings.thread["comments_by_music"])
-    print("正在{}线程爬取评论".format(settings.thread["comments_by_music"]))
+    logger.info("正在{}线程爬取评论".format(settings.thread["comments_by_music"]))
     for i in range(batch_num):
         # saveMusicBatch(index)
         fut = pool.submit(saveCommentBatch, i * music_batch_size, music_batch_size)
@@ -209,10 +202,10 @@ def commentSpider():
     for fut in future_list:
         fut.result()
     pool.shutdown()
-    print("======= 结束爬 评论 信息 ===========")
+
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 评论 信息 ===========")
+    logger.info("耗时：{}秒".format((endTime - startTime).seconds))
 
 # if __name__ == '__main__':
 #     commentSpider()

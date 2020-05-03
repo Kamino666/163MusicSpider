@@ -8,6 +8,7 @@ import random
 import time
 import traceback
 from concurrent.futures.process import ProcessPoolExecutor
+import logging
 
 import requests
 import retrying
@@ -16,6 +17,8 @@ from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
 from src.util import settings
+
+logger = logging.getLogger('MusicSpider')
 
 
 class Music(object):
@@ -50,7 +53,7 @@ class Music(object):
         try:
             r = get()
         except Exception as e:
-            print("代理连接失败", e)
+            logger.critical("代理连接失败" + str(e))
             return
         # r = requests.get(url, headers=self.headers)
         # 解析
@@ -60,7 +63,7 @@ class Music(object):
             # redis_util.saveUrl(redis_util.musicPrefix, str(toplist_id))
             pass
         else:
-            print(url, " request error :", toplist_json)
+            logger.error("{} request error :{}".format(url, toplist_json))
             return
         for item in toplist_json['result']['tracks']:
             music_id = item['id']
@@ -71,7 +74,7 @@ class Music(object):
                 sql.insert_music(music_id, music_name, album_id)
             except Exception as e:
                 # 打印错误日志
-                print(music_id, music_name, toplist_id, ' insert db error: ', str(e))
+                logger.debug(' insert db error: ' + str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
             finally:
@@ -85,7 +88,6 @@ def saveMusicByToplist():
         toplists = sql.get_toplists()  # 获取所有榜单信息
     finally:
         sql.conn_lock.release()
-    print("total:", len(toplists), "toplists", "start")
     for i in toplists:
         try:
             # 调用网易云api爬取
@@ -95,27 +97,26 @@ def saveMusicByToplist():
             time.sleep(2)
         except Exception as e:
             # 打印错误日志
-            print(str(i) + ' interval error: ' + str(e))
+            logger.error(str(i) + ' interval error: ' + str(e))
             time.sleep(2)
-    print("total:", len(toplists), "toplists", "finished")
 
 
 def musicSpider():
-    print("======= 开始爬 音乐 信息 ===========")
+    logger.info("======= 开始爬 音乐 信息 ===========")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
+
     # 所有榜单数量
     try:
         sql.conn_lock.acquire()
         toplists_num = sql.get_toplists_num()
     finally:
         sql.conn_lock.release()
-    print("所有榜单数量：", toplists_num)
+    logger.info("所有榜单数量：{}".format(toplists_num))
     saveMusicByToplist()
-    print("======= 结束爬 音乐 信息 ===========")
+
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 音乐 信息 ===========")
+    logger.info("耗时：{}秒".format((endTime - startTime).seconds))
 
 # if __name__ == '__main__':
 #     musicSpider()

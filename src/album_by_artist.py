@@ -10,12 +10,14 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 from bs4 import BeautifulSoup
 import retrying
+import logging
 
 from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
 from src.util import settings
 
+logger = logging.getLogger('MusicSpider')
 
 class Album(object):
     headers = {
@@ -39,14 +41,7 @@ class Album(object):
         # 获取歌手个人主页
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
-        # 去redis验证是否爬取过
         url = 'http://music.163.com/artist/album?id=' + str(artist_id)
-
-        # check = redis_util.checkIfRequest(redis_util.artistPrefix, url)
-        # if check:
-        #     print("url:", url, "has request. pass")
-        #     time.sleep(2)
-        #     return
 
         # 访问
         @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
@@ -58,14 +53,12 @@ class Album(object):
         try:
             r = get()
         except Exception as e:
-            print("代理连接失败", e)
+            logger.critical("代理连接失败", exc_info=True)
             return
 
         # r = requests.get('http://music.163.com/artist/album', headers=self.headers, params=params)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
-        # 保存redis去重缓存
-        # redis_util.saveUrl(redis_util.artistPrefix, url)
         # 所有图片
         imgs = soup.find_all('div', attrs={'class': 'u-cover u-cover-alb3'})
         # 专辑信息
@@ -82,34 +75,32 @@ class Album(object):
                 sql.insert_album(album_id, artist_id, imgs[index].get('title'), img_url)
             except Exception as e:
                 # 打印错误日志
-                print(str(album) + ' insert error : ' + str(e))
-                time.sleep(1)
+                logger.debug(str(album) + ' insert error : ' + str(e))
             finally:
                 sql.conn_lock.release()
 
 
 def saveAlbumBatch(index, batch_size):
     my_album = Album()
-    try:
+    try:  # 获取数据库锁
         sql.conn_lock.acquire()
         artists = sql.get_artist_page(index, batch_size)
     finally:
         sql.conn_lock.release()
-    print("index:", index, "batch_size:", batch_size, "artists :", len(artists), "start")
+    logger.info("index:{} batch_size:{} 开始".format(index, batch_size))
     for i in artists:
         try:
             my_album.saveAlbums(i['artist_id'])
         except Exception as e:
             # 打印错误日志
-            print(str(i), ' internal  error : ', str(e))
-            time.sleep(2)
-    print("index:", index, "finished")
+            logger.error(str(i) + ' internal  error : ' + str(e))
+    logger.info("index:{} batch_size:{} 结束".format(index, batch_size))
 
 
 def albumSpider():
-    print("======= 开始爬 专辑 信息 ===========")
+    logger.info("======= 开始爬 专辑 信息 ===========")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
+
     # 所有歌手数量
     artists_num = sql.get_all_artist_num()
     # batch = math.ceil(artists_num.get('num') / 1000.0)
@@ -119,7 +110,7 @@ def albumSpider():
     future_list = []
     # 构建线程池
     pool = ThreadPoolExecutor(max_workers=settings.thread["album_by_artist"])
-    print("正在{}线程爬取专辑".format(settings.thread["album_by_artist"]))
+    logger.info("正在{}线程爬取专辑".format(settings.thread["album_by_artist"]))
     for i in range(batch_num):
         # saveAlbumBatch(i*playlist_batch_size, playlist_batch_size)
         fut = pool.submit(saveAlbumBatch, i * artist_batch_size, artist_batch_size)
@@ -127,11 +118,10 @@ def albumSpider():
     for fut in future_list:
         fut.result()
     pool.shutdown()
-    print("======= 结束爬 专辑 信息 ===========")
+
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 专辑 信息 ===========")
+    logger.info("耗时：{}秒".format((endTime - startTime).seconds))
 
-
-if __name__ == '__main__':
-    albumSpider()
+# if __name__ == '__main__':
+#     albumSpider()

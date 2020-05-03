@@ -8,6 +8,7 @@ import random
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+import logging
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,6 +18,8 @@ from src import sql
 from src.util.user_agents import agents
 from src.util import proxy
 from src.util import settings
+
+logger = logging.getLogger('MusicSpider')
 
 
 class Music(object):
@@ -36,51 +39,9 @@ class Music(object):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36'
     }
 
-    # 采用模仿网易云页面请求的方式爬取
-    def save_music(self, album_id):
-        params = {'id': album_id}
-        # 获取专辑对应的页面
-        agent = random.choice(agents)
-        self.headers["User-Agent"] = agent
-        url = 'https://music.163.com/album?id=' + str(album_id)
-        # 去redis验证是否爬取过这个专辑
-        # check = redis_util.checkIfRequest(redis_util.albumPrefix, url)
-        # if check:
-        #     print("url:", url, "has request. pass")
-        #     time.sleep(1)
-        #     return
-
-        # 访问
-        r = requests.get('https://music.163.com/album', headers=self.headers, params=params)
-        # 网页解析
-        soup = BeautifulSoup(r.content.decode(), 'html.parser')
-        body = soup.body
-        # 保存redis去重缓存
-        # redis_util.saveUrl(redis_util.albumPrefix, url)
-        musics = body.find('ul', attrs={'class': 'f-hide'}).find_all('li')  # 获取专辑的所有音乐
-        if len(musics) == 0:
-            return
-        for music in musics:
-            music = music.find('a')
-            music_id = music['href'].replace('/song?id=', '')
-            music_name = music.getText()
-            try:
-                sql.insert_music(music_id, music_name, album_id)
-            except Exception as e:
-                # 打印错误日志
-                print(music, ' inset db error: ', str(e))
-                # traceback.print_exc()
-                time.sleep(1)
-
     # 调用网易云api爬取
     def save_music_by_api(self, album_id):
         url = "http://music.163.com/api/album/" + str(album_id)
-        # 去redis验证是否爬取过这个专辑
-        # check = redis_util.checkIfRequest(redis_util.albumPrefix, str(album_id))
-        # if check:
-        #     print("url:", url, "has request. pass")
-        #     time.sleep(1)
-        #     return
 
         # 访问
         agent = random.choice(agents)
@@ -94,7 +55,7 @@ class Music(object):
         try:
             r = get()
         except Exception as e:
-            print("代理连接失败", e)
+            logger.critical("代理连接失败" + str(e))
             return
         # r = requests.get(url, headers=self.headers)
         # 解析
@@ -104,7 +65,7 @@ class Music(object):
             # redis_util.saveUrl(redis_util.albumPrefix, str(album_id))
             pass
         else:
-            print(url, " request error :", album_json)
+            logger.error("{} api请求错误: {}".format(url, album_json))
             return
         for item in album_json.get('album').get('songs'):
             music_id = item['id']
@@ -114,7 +75,7 @@ class Music(object):
                 sql.insert_music(music_id, music_name, album_id)
             except Exception as e:
                 # 打印错误日志
-                print(music_id, music_name, album_id, ' insert db error: ', str(e))
+                logger.info(' insert db error: ' + str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
             finally:
@@ -128,39 +89,37 @@ def saveMusicBatch(index, batch_size):
         albums = sql.get_album_page(index, batch_size)
     finally:
         sql.conn_lock.release()
-    print("index:", index, "batch_size:", batch_size, " albums :", len(albums), "start")
+    logger.info("index: {} batchsize:{} 开始".format(index, batch_size))
     for i in albums:
         try:
             # 调用网易云api爬取
             my_music.save_music_by_api(i['album_id'])
-            # 采用模仿网易云页面请求的方式爬取
-            # my_music.save_music(i['album_id'])
             time.sleep(1)
         except Exception as e:
             # 打印错误日志
-            print(str(i) + ' interval error: ' + str(e))
+            logger.error(str(i) + ' interval error: ' + str(e))
             time.sleep(2)
-    print("index:", index, "finished")
+    logger.info("index: {} batchsize:{} 结束".format(index, batch_size))
 
 
 def musicSpider():
-    print("======= 开始爬 音乐 信息 ===========")
+    logger.info("======= 开始爬 音乐 信息 ===========")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
+
     # 所有专辑数量
     try:
         sql.conn_lock.acquire()
         albums_num = sql.get_all_album_num().get('num')
     finally:
         sql.conn_lock.release()
-    print("所有专辑数量：", albums_num)
+    logger.info("所有专辑数量：{}".format(albums_num))
     # 分批
     album_batch_size = settings.batch["music_by_album"]
     batch_num = math.ceil(albums_num / album_batch_size)
     future_list = []
     # 构建线程池
     pool = ThreadPoolExecutor(max_workers=settings.thread["music_by_album"])
-    print("正在{}线程爬取专辑".format(settings.thread["music_by_album"]))
+    logger.info("正在{}线程爬取专辑".format(settings.thread["music_by_album"]))
     for i in range(batch_num):
         # saveMusicBatch(index)
         fut = pool.submit(saveMusicBatch, i * album_batch_size, album_batch_size)
@@ -168,11 +127,10 @@ def musicSpider():
     for fut in future_list:
         fut.result()
     pool.shutdown()
-    print("======= 结束爬 音乐 信息 ===========")
+
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 音乐 信息 ===========")
+    logger.info("耗时：{} 秒".format((endTime - startTime).seconds))
 
-
-if __name__ == '__main__':
-    musicSpider()
+# if __name__ == '__main__':
+#     musicSpider()

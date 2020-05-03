@@ -1,7 +1,7 @@
 import ujson
 import os
 
-path = os.path.join(os.path.abspath("."), os.pardir, "conf", "settings.json")
+path = os.path.join(os.path.abspath("."), "conf", "settings.json")  # , os.pardir
 _SETTINGS = ujson.load(open(path))
 thread = _SETTINGS["thread"]
 batch = _SETTINGS["batch"]

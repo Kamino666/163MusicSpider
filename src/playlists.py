@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import math
+import logging
 
 import requests
 from bs4 import BeautifulSoup
@@ -31,6 +32,7 @@ headers = {
     'Upgrade-Insecure-Requests': '1',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36'
 }
+logger = logging.getLogger('MusicSpider')
 
 
 def save_playlist(cat_url):
@@ -51,14 +53,14 @@ def save_playlist(cat_url):
         try:
             r = get()
         except Exception as e:
-            print("代理连接失败", e)
+            logger.critical("致命错误！网络连接失败", exc_info=True)
             return
-        print("== 爬取数据url ==", url)
+        logger.debug("爬取数据url:" + url)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
         playlists_apage = soup.find(attrs={"class": "m-cvrlst f-cb"})
         if playlists_apage is None:  # 爬到大概38页 出口1
-            print("风格歌单全部爬完")
+            logger.info("风格歌单全部爬完")
             break
         else:
             offset += 35
@@ -80,12 +82,12 @@ def save_playlist(cat_url):
                 # print("sql success")
             except Exception as e:
                 # 打印错误日志
-                print(e)
+                logger.debug(str(e))
             finally:
                 sql.conn_lock.release()
         # 计算单页小于某一数值的歌单数量，若播放量少的歌单多，那就不爬下一页
-        if weakCount / pageCount > 0.4:  # 出口2
-            print("风格歌单爬取到热门页，停止")
+        if weakCount / pageCount > 0.3:  # 出口2
+            logger.warning("风格歌单爬取到热门页，停止")
             break
 
 
@@ -107,8 +109,8 @@ def save_cat():
     try:
         r = get()
     except Exception as e:
-        print("代理连接失败", e)
-        return
+        logger.critical("致命错误！网络连接失败", exc_info=True)
+        raise Exception("save_cat中网络连接失败")
     # 解析
     soup = BeautifulSoup(r.content.decode(), 'html.parser')
     cats = soup.find_all('a', attrs={"class": "s-fc1"})
@@ -120,35 +122,33 @@ catList = []
 
 
 def playlistSpider():
-    print("======= 开始爬 歌单 信息 =======")
+    logger.info("======= 开始爬 歌单 信息 =======")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
     try:
         save_cat()
-        print("获取到{}个歌单分类".format(len(catList)))
+        logger.info("获取到{}个歌单分类".format(len(catList)))
         pool = ThreadPoolExecutor(max_workers=settings.thread["playlists"])
-        print("歌单正在{}线程爬取".format(settings.thread["playlists"]))
+        logger.info("歌单正在{}线程爬取".format(settings.thread["playlists"]))
         # 分批
         playlist_batch_size = settings.batch["playlists"]
         batch_num = math.ceil(len(catList) / playlist_batch_size)
+        logger.info("歌单爬取批次大小为{}".format(playlist_batch_size))
         future_list = []
         for i in range(batch_num):
-            fut = pool.submit(save_playlist_batch, catTmpList=catList[
-                                                              i * settings.batch["playlists"]:i * settings.batch[
-                                                                  "playlists"] + settings.batch["playlists"]])
+            fut = pool.submit(save_playlist_batch
+                              , catTmpList=catList[i * settings.batch["playlists"]:i * settings.batch["playlists"] +
+                                                                                   settings.batch["playlists"]])
             future_list.append(fut)
         for fut in future_list:  # 等待结果
             fut.result()
         pool.shutdown()
-    except Exception as e:
-        print(e)
-    print("======= 结束爬 歌单 信息 =======")
+    except Exception as e:  # 捕获save_cat的错误
+        logger.critical(str(e))
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 歌单 信息 =======")
+    logger.info("歌单爬取耗时：" + str((endTime - startTime).seconds) + "秒")
 
-
-if __name__ == '__main__':
-    playlistSpider()
+# if __name__ == '__main__':
+#     playlistSpider()
 # save_cat()
 # save_playlist("/discover/playlist/?cat=%E5%8D%8E%E8%AF%AD")

@@ -4,6 +4,7 @@
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import logging
 
 import requests
 import retrying
@@ -27,10 +28,11 @@ headers = {
     'Upgrade-Insecure-Requests': '1',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36'
 }
+logger = logging.getLogger('MusicSpider')
 
 
 def save_toplist():
-    print("== 爬取数据参数 ==")
+    # print("== 爬取数据参数 ==")
 
     # 爬取
     @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
@@ -40,8 +42,8 @@ def save_toplist():
 
     try:
         r = get()
-    except Exception as e:
-        print("代理连接失败", e)
+    except Exception as e:  # 致命网络错误
+        logger.critical("致命错误！网络连接失败", exc_info=True)
         return
     # 网页解析
     toplistJson = ujson.loads(r.content.decode())
@@ -54,23 +56,24 @@ def save_toplist():
             sql.insert_toplist(toplist_id, toplist_name, toplist_subscribedCount)
         except Exception as e:
             # 打印错误日志
-            print(e)
+            logger.debug("sql ERROR:" + str(e))
         finally:
             sql.conn_lock.release()
 
 
 def toplistSpider():
-    print("======= 开始爬 榜单 信息 =======")
+    logger.info("======= 开始爬 榜单 信息 =======")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("榜单正在{}线程爬取".format(settings.thread["toplists"]))
+
+    logger.info("榜单正在{}线程爬取".format(settings.thread["toplists"]))
+    # 构建线程池
     pool = ThreadPoolExecutor(max_workers=settings.thread["toplists"])
     pool.submit(save_toplist)
     pool.shutdown()
-    print("======= 结束爬 榜单 信息 =======")
+
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 榜单 信息 =======")
+    logger.info("榜单爬取耗时：" + str((endTime - startTime).seconds) + "秒")
 
 if __name__ == '__main__':
     toplistSpider()

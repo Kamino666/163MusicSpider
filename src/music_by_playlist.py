@@ -8,6 +8,7 @@ import random
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+import logging
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,6 +19,7 @@ from src.util.user_agents import agents
 from src.util import proxy
 from src.util import settings
 
+logger = logging.getLogger('MusicSpider')
 
 class Music(object):
     headers = {
@@ -52,16 +54,16 @@ class Music(object):
         try:
             r = get()
         except Exception as e:
-            print("代理连接失败", e)
+            logger.critical("代理连接失败" + str(e))
             return
         # r = requests.get(url, headers=self.headers)
         # 解析
-        album_json = json.loads(r.text)
+        playlist_json = json.loads(r.text)
         # 错误处理
-        if album_json['code'] != 200:
-            print(url, " request error :", album_json)
+        if playlist_json['code'] != 200:
+            logger.error("{} request error :{}".format(url, playlist_json))
             return
-        for item in album_json.get('result').get('tracks'):
+        for item in playlist_json.get('result').get('tracks'):
             music_id = item['id']
             music_name = item['name']
             try:
@@ -70,7 +72,7 @@ class Music(object):
                 # print("sql success a song")
             except Exception as e:
                 # 打印错误日志
-                print(music_id, music_name, playlist_id, ' insert db error: ', str(e))
+                logger.debug(' insert db error: ' + str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
             finally:
@@ -85,7 +87,7 @@ def saveMusicBatch(index, batch_size):
         playlists = sql.get_playlist_page(index, batch_size)
     finally:
         sql.conn_lock.release()
-    print("index:", index, "batch_size:", batch_size, " playlists :", len(playlists), "start")
+    logger.info("index:{} batch_size:{} 开始".format(index, batch_size))
     for i in playlists:
         try:
             # 调用网易云api爬取
@@ -94,25 +96,25 @@ def saveMusicBatch(index, batch_size):
             time.sleep(1)
         except Exception as e:
             # 打印错误日志
-            print(str(i) + ' interval error: ' + str(e))
+            logger.info(str(i) + ' interval error: ' + str(e))
             time.sleep(2)
-    print("index:", index, "finished")
+    logger.info("index:{} batch_size:{} 结束".format(index, batch_size))
 
 
 def musicSpider():
-    print("======= 开始爬 歌单音乐 信息 ===========")
+    logger.info("======= 开始爬 歌单音乐 信息 ===========")
     startTime = datetime.datetime.now()
-    print(startTime.strftime('%Y-%m-%d %H:%M:%S'))
+
     # 所有歌单数量
     playlists_num = sql.get_playlists_num()['num']
-    print("所有歌单数量：", playlists_num)
+    logger.info("所有歌单数量：{}".format(playlists_num))
     # 分批
     playlist_batch_size = settings.batch["music_by_playlist"]
     batch_num = math.ceil(playlists_num / playlist_batch_size)
     future_list = []
     # 构建线程池
     pool = ThreadPoolExecutor(max_workers=settings.thread["music_by_playlist"])
-    print("正在{}线程爬取专辑".format(settings.thread["music_by_playlist"]))
+    logger.info("正在{}线程爬取专辑".format(settings.thread["music_by_playlist"]))
     for i in range(batch_num):
         # saveMusicBatch(index)
         fut = pool.submit(saveMusicBatch, i * playlist_batch_size, playlist_batch_size)
@@ -120,10 +122,10 @@ def musicSpider():
     for fut in future_list:
         fut.result()
     pool.shutdown()
-    print("======= 结束爬 音乐 信息 ===========")
+
     endTime = datetime.datetime.now()
-    print(endTime.strftime('%Y-%m-%d %H:%M:%S'))
-    print("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("======= 结束爬 音乐 信息 ===========")
+    logger.info("耗时：{}秒".format((endTime - startTime).seconds))
 
 # if __name__ == '__main__':
 #     musicSpider()

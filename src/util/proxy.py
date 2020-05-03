@@ -1,36 +1,45 @@
 import requests
-from threading import Thread
+from threading import Thread, Event
 import os
 import time
+import logging
 
 import ujson
 
 from src.util import settings
 
 proxy = {}
-# VALID_PROXY = [True, True]
-# VALID_HTTP_ONLY_PROXY = [True, False]
-# VALID_HTTPS_ONLY_PROXY = [False, True]
+logger = logging.getLogger("MusicSpider")
 
+try:
+    # 读入本地代理文件
+    local_path = os.path.join(os.path.abspath("."), "conf", "proxies.json")
+    with open(local_path) as json_fptr:
+        local_proxies = ujson.loads(json_fptr.read())
+except FileNotFoundError as e:
+    if settings.proxy["mode"] == "file":
+        logger.critical("proxies.json not found", exc_info=True)
+    else:
+        logger.warning("proxies.json not found")
+finally:
+    local_proxies_count = 0  # 本地代理计数
 
-# 读入本地代理文件
-local_path = os.path.join(os.path.abspath("."), os.pardir, "conf", "proxies.json")
-with open(local_path) as json_fptr:
-    local_proxies = ujson.loads(json_fptr.read())
-local_proxies_count = 0  # 本地代理计数
 # 全局代理计数
 proxy_count = 0
 # 全局有效代理计数
 valid_proxy_count = 0
+# 结束标记
+EXIT_MARK = False
+proxyExitEvent = Event()
 
 
 # 网络API获得代理
 def getFromWeb():
     """
     在此函数写下关于你的代理供应商的API
-    :return: {protocol:ip:port}
+    :return: {"protocol":"ip:port"}
     """
-    path = os.path.join(os.path.abspath("."), os.pardir, "conf", "proxyAPI.cfg")
+    path = os.path.join(os.path.abspath("."), "conf", "proxyAPI.cfg")  # , os.pardir
     with open(path, 'r') as f:
         url = f.readline()
         r = requests.get(url)
@@ -40,7 +49,7 @@ def getFromWeb():
         pInfo = {'http': pJson["RESULT"][0]["ip"] + ":" + pJson["RESULT"][0]["port"],
                  'https': pJson["RESULT"][0]["ip"] + ":" + pJson["RESULT"][0]["port"], }
         # {'http':'x.x.x.x:y','https':'x.x.x.x:y'}
-        print("从网络获取一个代理")
+        logger.info("从网络获取一个代理")
         # 总代理数+1
         global proxy_count
         proxy_count += 1
@@ -49,12 +58,19 @@ def getFromWeb():
 
 # 本地文件API
 def getFromFile():
+    global local_proxies
     global local_proxies_count  # 本地代理数+1
     local_proxies_count += 1
-    global local_proxies
     global proxy_count  # 总代理数+1
     proxy_count += 1
-    return local_proxies["info"][local_proxies_count - 1]
+    rslt = None
+    try:
+        rslt = local_proxies["info"][local_proxies_count - 1]
+    except IndexError:
+        logger.critical("本地文件没有更多的代理")
+    else:
+        logger.info("从本地文件获取一个代理")
+    return rslt
 
 
 # 通过 http://icanhazip.com/ https://icanhazip.com/ 来验证
@@ -122,40 +138,35 @@ def test_proxy(p=None):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36'
     }
     if p is None and proxy is None:  # 假如未指定测试代理且当前代理为空
-        print("检测代理有效性时发现未设置代理")
+        logger.warning("检测代理有效性时发现未设置代理")
         return False
     if p is None:  # 假如未指定测试代理
         p = proxy
     try:
         r = requests.get("https://music.163.com/discover/toplist", headers=headers, proxies=p)
-        print("检测{}代理有效".format(p))
+        logger.debug("检测{}代理有效".format(p))
         return True
     except Exception:
-        print("检测{}代理失效".format(p))
+        logger.warning("检测{}代理失效".format(p))
         return False
 
 
 # 一定时间内检查一次代理是否出错。假如出错则替换
 def proxy_detector():
     while True:
-        print("检测代理中")
+        global EXIT_MARK
+        logger.info("检测代理中")
         if test_proxy() is False:
-            # print("检测到代理失效")
+            if EXIT_MARK is True:
+                logger.warning("代理检测器停止")
+                proxyExitEvent.set()
+                return
+            logger.warning("检测到代理失效，尝试更换")
             change_proxy()
+        if proxy_count >= settings.proxy["max_proxy_num"]:
+            logger.warning("达到代理获取上限，下次代理失效时结束")
+            EXIT_MARK = True
         time.sleep(5)
-
-
-# def changeProxy():
-#     print("获取新代理中")
-#     global proxy
-#     if settings.proxy["mode"] == "web":
-#         newproxy = getFromWeb()
-#     elif settings.proxy["mode"] == "file":
-#         newproxy = getFromFile()
-#     else:
-#         newproxy = None
-#     print("代理更换完毕{}-->{}".format(proxy, newproxy))
-#     proxy = newproxy
 
 
 # 更换一个有效的代理
@@ -164,7 +175,6 @@ def change_proxy():
     负责将全局代理更换成一个有效的
     :return:
     """
-    print("更换代理中")
     global proxy
     newproxy = None
     while True:
@@ -178,26 +188,26 @@ def change_proxy():
             valid_proxy_count += 1
             break
         else:
-            print("获取代理无效，重新获取代理")
-    print("代理更换完毕{}-->{}".format(proxy, newproxy))
+            logger.error("获取代理无效，重新获取代理")
+    logger.info("代理更换完毕{}-->{}".format(proxy, newproxy))
     proxy = newproxy
 
 
 if settings.proxy["activate"]:
-    print("开启使用代理模式")
+    logger.info("开启使用代理模式")
     if settings.proxy["mode"] == "web":
-        print("代理获取源为网络")
+        logger.info("代理获取源为网络")
     elif settings.proxy["mode"] == "file":
-        print("代理获取源为本地json文件")
+        logger.info("代理获取源为本地json文件")
     # 如果当前代理为空
     if len(proxy) == 0:
-        print("初始化代理中")
+        logger.info("初始化代理中")
         change_proxy()
-        print("启动代理检测器")
-        detector = Thread(target=proxy_detector)
+        logger.info("启动代理检测器")
+        detector = Thread(target=proxy_detector, name="proxy_detector")
         detector.start()
 else:
-    print("开启不使用代理模式")
+    logger.info("开启不使用代理模式")
 
 # if __name__ == "__main__":
 #     changeProxy()
