@@ -50,7 +50,8 @@ def save_playlist(cat_url):
         @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
                         wait_fixed=settings.connect["interval"])
         def get():
-            return requests.get(url, headers=headers, params=params, proxies=proxy.proxy)
+            return requests.get(url, headers=headers, params=params, proxies=proxy.proxy,
+                                timeout=settings.connect["timeout"])
 
         try:
             r = get()
@@ -108,7 +109,7 @@ def save_cat():
 
     @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
     def get():
-        return requests.get(url, headers=headers, proxies=proxy.proxy)
+        return requests.get(url, headers=headers, proxies=proxy.proxy, timeout=settings.connect["timeout"])
 
     try:
         r = get()

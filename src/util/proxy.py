@@ -144,7 +144,7 @@ def test_proxy(p=None):
     if p is None:  # 假如未指定测试代理
         p = proxy
     try:
-        r = requests.get("https://music.163.com/discover/toplist", headers=headers, proxies=p)
+        r = requests.get("https://music.163.com/discover/toplist", headers=headers, proxies=p, timeout=3)
         logger.debug("检测{}代理有效".format(p))
         return True
     except Exception:

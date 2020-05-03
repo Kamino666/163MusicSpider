@@ -49,7 +49,7 @@ class Music(object):
         @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"],
                         wait_fixed=settings.connect["interval"])
         def get():
-            return requests.get(url, headers=self.headers, proxies=proxy.proxy)
+            return requests.get(url, headers=self.headers, proxies=proxy.proxy, timeout=settings.connect["timeout"])
 
         try:
             r = get()

@@ -35,6 +35,6 @@
   "connect": {
     "max_retries": 2,
     "interval": 1000,
-    "timeout": 5
+    "timeout": 4
   }
 }

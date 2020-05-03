@@ -50,7 +50,7 @@ class Album(object):
                         wait_fixed=settings.connect["interval"])
         def get():
             return requests.get('http://music.163.com/artist/album', headers=self.headers, params=params
-                                , proxies=proxy.proxy)
+                                , proxies=proxy.proxy, timeout=settings.connect["timeout"])
 
         try:
             r = get()
