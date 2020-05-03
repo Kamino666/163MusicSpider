@@ -36,6 +36,8 @@ logger = logging.getLogger('MusicSpider')
 def save_artist(group_id, initial):
     params = {'id': group_id, 'initial': initial}
     logger.info("歌手爬取数据参数:{}".format(str(params)))
+    if group_id == "5001":
+        return
 
     # 访问
     @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
