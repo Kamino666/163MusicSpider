@@ -75,5 +75,5 @@ def toplistSpider():
     logger.info("======= 结束爬 榜单 信息 =======")
     logger.info("榜单爬取耗时：" + str((endTime - startTime).seconds) + "秒")
 
-if __name__ == '__main__':
-    toplistSpider()
+# if __name__ == '__main__':
+#     toplistSpider()

@@ -171,10 +171,13 @@ def saveCommentBatch(index, batch_size):
         try:
             validNum = my_comment.saveComment(item['music_id'])
             allValidNum += validNum
-            # time.sleep(10)
+            # 频率控制
+            time.sleep(2)
         except Exception as e:
             # 打印错误日志
             logger.error(' internal  error : ' + str(e))
+            # 频率控制
+            time.sleep(3)
     logger.info("index:{} batch_size:{} 结束，共获取有效评论{}条".format(index, batch_size, allValidNum))
 
 

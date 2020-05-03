@@ -36,6 +36,7 @@ logger = logging.getLogger('MusicSpider')
 
 
 def save_playlist(cat_url):
+    logger.info("爬取歌单url:{}".format(cat_url))
     offset = 0
     while offset < 1300:  # 备用出口
         weakCount = 0
@@ -55,7 +56,7 @@ def save_playlist(cat_url):
         except Exception as e:
             logger.critical("致命错误！网络连接失败", exc_info=True)
             return
-        logger.debug("爬取数据url:" + url)
+        # logger.debug("爬取数据url:" + url)
         # 网页解析
         soup = BeautifulSoup(r.content.decode(), 'html.parser')
         playlists_apage = soup.find(attrs={"class": "m-cvrlst f-cb"})
@@ -89,6 +90,8 @@ def save_playlist(cat_url):
         if weakCount / pageCount > 0.3:  # 出口2
             logger.warning("风格歌单爬取到热门页，停止")
             break
+        # 频率控制
+        time.sleep(1)
 
 
 def save_playlist_batch(catTmpList):
@@ -116,6 +119,8 @@ def save_cat():
     cats = soup.find_all('a', attrs={"class": "s-fc1"})
     for cat in cats:
         catList.append(cat.get("href"))
+    # 频率控制
+    time.sleep(1)
 
 
 catList = []

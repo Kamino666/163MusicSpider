@@ -92,11 +92,12 @@ def saveMusicBatch(index, batch_size):
         try:
             # 调用网易云api爬取
             my_music.save_music_by_api(i['playlist_id'])
-            # 暂停
+            # 频率控制
             time.sleep(1)
         except Exception as e:
             # 打印错误日志
             logger.info(str(i) + ' interval error: ' + str(e))
+            # 频率控制
             time.sleep(2)
     logger.info("index:{} batch_size:{} 结束".format(index, batch_size))
 

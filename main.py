@@ -63,14 +63,35 @@ pass
 if __name__ == '__main__':
     init_logger()
     try:
-        # from src import sql
-        # from src.album_by_artist import albumSpider
-        # from src.artists import artistSpider
-        # from src.comments_by_music import commentSpider
-        # from src.lyric_by_music import lyricSpider
-        # from src.music_by_album import musicSpider
+        from src import sql
+        from src.album_by_artist import albumSpider
+        from src.artists import artistSpider
+        from src.comments_by_music import commentSpider
+        import src.music_by_album as ma
+        import src.music_by_playlist as mp
+        import src.music_by_toplist as mt
         from src.playlists import playlistSpider
-    except Exception:
-        print("初始化错误")
+        from src.toplists import toplistSpider
+
+        # 清空数据库
+        sql.truncate_all()
+        # 执行toplist
+        toplistSpider()
+        # 执行artists
+        artistSpider()
+        # 执行playlists
+        playlistSpider()
+        # 执行album_by_artist
+        albumSpider()
+        # 执行music_by_album/playlist/toplist
+        ma.musicSpider()
+        mp.musicSpider()
+        mt.musicSpider()
+        # 执行comments_by_music
+        commentSpider()
+
+        # DEBUG
+        # commentSpider()
+    except Exception as e:
+        logger.critical("错误", exc_info=True)
         pass
-    playlistSpider()

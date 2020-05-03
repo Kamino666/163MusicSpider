@@ -6,6 +6,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import logging
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -33,7 +34,7 @@ logger = logging.getLogger('MusicSpider')
 
 def save_artist(group_id, initial):
     params = {'id': group_id, 'initial': initial}
-    logger.info("歌手爬取数据参数:", params)
+    logger.info("歌手爬取数据参数:{}".format(str(params)))
 
     # 访问
     @retrying.retry(stop_max_attempt_number=settings.connect["max_retries"], wait_fixed=settings.connect["interval"])
@@ -88,6 +89,9 @@ def save_artist(group_id, initial):
             logger.debug(str(e))
         finally:
             sql.conn_lock.release()
+
+    # 频率控制
+    time.sleep(1)
 
 
 labelList = []

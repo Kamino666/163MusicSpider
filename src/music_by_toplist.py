@@ -94,10 +94,12 @@ def saveMusicByToplist():
             my_music.save_music_by_api(i['toplist_id'])
             # 采用模仿网易云页面请求的方式爬取
             # my_music.save_music(i['toplist_id'])
-            time.sleep(2)
+            # 频率控制
+            time.sleep(1)
         except Exception as e:
             # 打印错误日志
             logger.error(str(i) + ' interval error: ' + str(e))
+            # 频率控制
             time.sleep(2)
 
 

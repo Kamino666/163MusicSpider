@@ -75,7 +75,7 @@ class Music(object):
                 sql.insert_music(music_id, music_name, album_id)
             except Exception as e:
                 # 打印错误日志
-                logger.info(' insert db error: ' + str(e))
+                logger.debug(' insert db error: ' + str(e))
                 # traceback.print_exc()
                 # time.sleep(1)
             finally:
@@ -83,21 +83,23 @@ class Music(object):
 
 
 def saveMusicBatch(index, batch_size):
+    logger.info("index: {} batchsize:{} 开始".format(index, batch_size))
     my_music = Music()
     try:
         sql.conn_lock.acquire()
         albums = sql.get_album_page(index, batch_size)
     finally:
         sql.conn_lock.release()
-    logger.info("index: {} batchsize:{} 开始".format(index, batch_size))
     for i in albums:
         try:
             # 调用网易云api爬取
             my_music.save_music_by_api(i['album_id'])
+            # 频率控制
             time.sleep(1)
         except Exception as e:
             # 打印错误日志
             logger.error(str(i) + ' interval error: ' + str(e))
+            # 频率控制
             time.sleep(2)
     logger.info("index: {} batchsize:{} 结束".format(index, batch_size))
 
@@ -124,6 +126,7 @@ def musicSpider():
         # saveMusicBatch(index)
         fut = pool.submit(saveMusicBatch, i * album_batch_size, album_batch_size)
         future_list.append(fut)
+        time.sleep(1)  # debug
     for fut in future_list:
         fut.result()
     pool.shutdown()

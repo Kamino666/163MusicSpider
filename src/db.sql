@@ -20,7 +20,7 @@ CREATE TABLE `albums` (
 CREATE TABLE `musics` (
   `music_id` int(20) NOT NULL,
   `music_name` varchar(255) DEFAULT NULL,
-  `album_id` int(20) UNSIGNED NOT NULL,
+  `album_id` int(30) UNSIGNED NOT NULL,
   PRIMARY KEY (`music_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

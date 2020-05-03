@@ -38,6 +38,7 @@ class Album(object):
     def saveAlbums(self, artist_id):
         # limit 分页，截止2019-08-26，发现专辑数大于1000的歌手
         params = {'id': artist_id, 'limit': '9999'}
+        logger.info("爬取歌手专辑参数:{}".format(str(params)))
         # 获取歌手个人主页
         agent = random.choice(agents)
         self.headers["User-Agent"] = agent
@@ -91,9 +92,13 @@ def saveAlbumBatch(index, batch_size):
     for i in artists:
         try:
             my_album.saveAlbums(i['artist_id'])
+            # 频率控制
+            time.sleep(1)
         except Exception as e:
             # 打印错误日志
             logger.error(str(i) + ' internal  error : ' + str(e))
+            # 频率控制
+            time.sleep(2)
     logger.info("index:{} batch_size:{} 结束".format(index, batch_size))
 
 

@@ -191,4 +191,8 @@ def truncate_all():
         cursor.execute(sql, ())
         sql = "truncate table lyrics"
         cursor.execute(sql, ())
+        sql = "truncate table playlists"
+        cursor.execute(sql, ())
+        sql = "truncate table toplists"
+        cursor.execute(sql, ())
     connection.commit()
