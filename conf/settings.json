@@ -25,7 +25,7 @@
     "charset": "utf8mb4"
   },
   "proxy": {
-    "activate": false,
+    "activate": true,
     "mode": "web",
     "max_proxy_num": 100
   },
@@ -34,7 +34,7 @@
   },
   "connect": {
     "max_retries": 2,
-    "interval": 1000,
+    "interval": 2000,
     "timeout": 4
   }
 }

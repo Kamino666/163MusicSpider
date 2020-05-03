@@ -74,25 +74,25 @@ if __name__ == '__main__':
         from src.playlists import playlistSpider
         from src.toplists import toplistSpider
 
-        # # 清空数据库
-        # sql.truncate_all()
-        # # 执行toplist
-        # toplistSpider()
-        # # 执行artists
-        # artistSpider()
-        # # 执行playlists
-        # playlistSpider()
-        # # 执行album_by_artist
-        # albumSpider()
-        # # 执行music_by_album/playlist/toplist
-        # ma.musicSpider()
-        # mp.musicSpider()
-        # mt.musicSpider()
-        # # 执行comments_by_music
-        # commentSpider()
+        # 清空数据库
+        sql.truncate_all()
+        # 执行toplist
+        toplistSpider()
+        # 执行artists
+        artistSpider()
+        # 执行playlists
+        playlistSpider()
+        # 执行album_by_artist
+        albumSpider()
+        # 执行music_by_album/playlist/toplist
+        ma.musicSpider()
+        mp.musicSpider()
+        mt.musicSpider()
+        # 执行comments_by_music
+        commentSpider()
 
         # DEBUG
-        artistSpider()
+        # artistSpider()
     except Exception as e:
         logger.critical("错误", exc_info=True)
         pass

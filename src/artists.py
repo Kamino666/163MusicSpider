@@ -125,7 +125,7 @@ def artistSpider():
 
     endTime = datetime.datetime.now()
     logger.info("======= 结束爬 歌手 信息 =======")
-    logger.info("耗时：", (endTime - startTime).seconds, "秒")
+    logger.info("耗时：{}秒".format((endTime - startTime).seconds))
 
 # if __name__ == '__main__':
 #     artistSpider()

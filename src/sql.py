@@ -3,13 +3,14 @@
 一般 Python 用于连接 MySQL 的工具：pymysql
 """
 import pymysql.cursors
+from src.util.settings import MySQL
 from threading import Lock
 
-connection = pymysql.connect(host='localhost',
-                             user='root',
-                             password='123456',
-                             db='test',
-                             charset='utf8mb4',
+connection = pymysql.connect(host=MySQL["host"],
+                             user=MySQL["user"],
+                             password=MySQL["password"],
+                             db=MySQL["db"],
+                             charset=MySQL["charset"],
                              cursorclass=pymysql.cursors.DictCursor)
 # 防止多线程用同一个connection导致的错误
 conn_lock = Lock()
